@@ -1,8 +1,0 @@
-export const validPassage=k=>/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}$/.test(k);
-export function validatePayload(k,n){return validPassage(k)&&n&&typeof n.text==='string'&&n.text.length<=200000&&typeof n.bookName==='string'&&n.bookName.length<150&&Number.isInteger(n.chapter)&&Number.isInteger(n.verse)&&`${n.book}.${n.chapter}.${n.verse}`===k;}
-export function payloadFor(k,notes,highlights){const [book,chapter,verse]=k.split('.');return {...(notes[k]||{text:'',book,bookName:book,chapter:Number(chapter),verse:Number(verse),updatedAt:new Date().toISOString()}),highlighted:Boolean(highlights[k])};}
-export function recordsToState(rows){const notes={},highlights={};for(const r of rows){if(!validatePayload(r.passage,r.payload))continue;if(r.payload.text)notes[r.passage]=r.payload;if(r.payload.highlighted)highlights[r.passage]=true;}return {notes,highlights};}
-// Merge background updates without touching navigation, forms or selection.
-export function mergeRemoteStudy(rows,{notes,highlights,revisions,pending,editingKey}){
- let changed=false;for(const r of rows){if(pending.has(r.passage)||r.passage===editingKey||Number(r.revision)===(revisions.get(r.passage)||0)||!validatePayload(r.passage,r.payload))continue;revisions.set(r.passage,Number(r.revision));if(r.payload.text)notes[r.passage]=r.payload;else delete notes[r.passage];if(r.payload.highlighted)highlights[r.passage]=true;else delete highlights[r.passage];changed=true;}return changed;
-}
