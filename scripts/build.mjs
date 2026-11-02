@@ -1,6 +1,8 @@
 import {build} from 'esbuild';
 import {mkdir,copyFile} from 'node:fs/promises';
 await mkdir('dist/vendor',{recursive:true});
-await build({stdin:{contents:"export {createClient} from '@supabase/supabase-js';",resolveDir:process.cwd()},outfile:'dist/vendor/supabase.js',bundle:true,format:'esm',minify:true,platform:'browser',target:'es2022'});
-for(const p of ['index.html','style.css','app.js','account.js','sync-model.js'])await copyFile(p,'dist/'+p);
+await build({stdin:{contents:"export {createClient} from '@supabase/supabase-js'; export {createBrowserClient,parseCookieHeader,serializeCookieHeader} from '@supabase/ssr';",resolveDir:process.cwd()},outfile:'dist/vendor/supabase.js',bundle:true,format:'esm',minify:true,platform:'browser',target:'es2022'});
+for(const p of ['index.html','style.css','app.js','account.js','sync-model.js','community.js','community-model.js','session-options.js'])await copyFile(p,'dist/'+p);
 console.log('Built static app and bundled Supabase client.');
+
+await import('./legal.mjs');
