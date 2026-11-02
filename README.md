@@ -75,3 +75,14 @@ Background study synchronization merges only changed records. It does not reappl
 At widths up to 760px, the app uses a dedicated five-tab bottom bar (Read, Study, Notebook, Friends, Account), a sticky passage toolbar and a full-screen searchable book/chapter picker. Tapping a verse opens the study drawer over the reader; close it to return to the same reading position. The drawer traps keyboard focus and closes with Escape or its close button. Draft fields remain mounted while switching between reading and study.
 
 Account, notebook, profile and conversation dialogs use full-screen phone panels. Controls are larger, form text avoids iOS input zoom, and padding accounts for device safe areas. Visual viewport height helps panels fit above a mobile keyboard. Desktop retains the three-column workspace. The automated phone interaction test checks drawer controls, draft preservation, book filtering and chapter navigation without creating user data.
+
+
+## Admin portal setup
+Open `/admin/` after signing in to your usual Bible account. The account menu also links to it. The server checks Supabase Auth and a server-only allowlist on every request; ordinary members cannot access reports or review history.
+
+1. In Supabase SQL Editor, run `db/admin.sql` once. It adds report statuses and an append-only review history, with no browser-accessible policies for that history. Review updates and audit events commit together.
+2. In Supabase Authentication → Users, copy your account's **User UID** (not your email).
+3. In Vercel project Settings → Environment Variables, add `ADMIN_USER_IDS` for Production containing that UID. For multiple admins, separate UIDs with commas. Do not prefix the variable with NEXT_PUBLIC.
+4. Redeploy the latest production deployment so the new variable takes effect. Sign in at the Bible site and open `/admin/`.
+
+Filter open/in-review/resolved/dismissed reports, inspect evidence, and record a decision note. This covers abuse reports and support/privacy/accessibility requests. Statuses do not themselves ban accounts, delete messages, or notify users. Internal review notes are not returned to reporters. Removing a UID from the allowlist and redeploying revokes portal access. Keep admin accounts secure; never grant access based on user-editable profile fields.
