@@ -12,6 +12,7 @@ export function createAdminHandler(makeClient=createClient,env=process.env){retu
  const auth=makeClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});const {data,error}=await auth.auth.getUser(token);
  if(error||!data.user)return res.status(401).json({error:'Session expired. Sign in again.'});
  const allowed=(env.ADMIN_USER_IDS||'').split(',').map(s=>s.trim()).filter(s=>uuid.test(s));
+ if(req.method==='GET'&&req.query?.access==='1')return res.status(200).json({admin:allowed.includes(data.user.id)});
  if(!allowed.includes(data.user.id))return res.status(403).json({error:'This account is not authorized for the admin portal.'});
  const db=makeClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}});
  if(req.method==='POST'){
