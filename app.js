@@ -1,6 +1,6 @@
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const flatten=v=>typeof v==='string'?v:Array.isArray(v)?v.map(flatten).join(''):v?.text??(v?.content?flatten(v.content):'');
+const flatten=v=>typeof v==='string'?v:Array.isArray(v)?v.map(flatten).join(' '):v?.text??(v?.content?flatten(v.content):'');
 const cache=new Map();
 async function api(path){if(cache.has(path))return cache.get(path);const r=await fetch('/api/bible?path='+encodeURIComponent(path));const d=await r.json();if(!r.ok)throw Error(d.error||'Unable to load this resource.');cache.set(path,d);return d;}
 function stored(key,fallback){try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}}
