@@ -53,3 +53,20 @@ ESV requests pass only a validated book/chapter to Crossway. ESV responses use `
 
 ## Verification
 `npm run check` covers the Bible proxy allowlist, public configuration boundary, ESV parsing/missing-key behavior and note payload restoration. Database isolation was verified during initial setup with rolled-back fixtures. Full email-confirmation, password-login and recovery tests need a test account and configured email delivery. Browser verification should cover sign-up/email confirmation, login, notes, refresh, cross-device changes, sign-out, recovery, OT Hebrew and NT Greek, commentary, comparison and mobile layout.
+
+## Profiles, friends and messages
+Profiles contain a unique username, display name, optional bio, general location, interests and a 256px WebP picture. Exact-username discovery is opt-in; there is no public directory. Accepted friends see profile details. Private notes remain owner-only. Profile photos are resized in the browser and the original metadata/file is not uploaded.
+
+Apply `db/social.sql`, then `db/social-hardening.sql` and `db/social-visibility.sql` as explicit, transaction-wrapped migrations. They create owner/participant RLS, accepted-friend-only message RPCs, exact-handle lookup, recipient-only request acceptance, blocks, reports and rate limits. No production test users or messages are created by builds or migrations. Reports include a snapshot of reported-message evidence and are available to the reporter and authorized operators through the database. An operator should review the `community_reports` table routinely; there is no automated email delivery or moderation dashboard yet.
+
+Messages are plaintext in the database, not end-to-end encrypted. Conversation view shows the latest 100 messages; the account export retrieves the complete accessible history. Message removal is a tombstone; unfriending preserves conversation history, blocking prevents new contact, and deleting an account cascades to its app records and messages for both participants. Reports retain text/evidence with account links removed. Only user-initiated controls send requests or messages.
+
+The account deletion endpoint verifies the caller's token with Supabase Auth, enforces same-origin POST and a typed DELETE confirmation, then deletes exactly that authenticated account with a server-only admin key. Keys and private records never enter the static bundle.
+
+## Persistent sessions and quiet synchronization
+The Supabase SSR browser client stores sessions in Secure/SameSite=Lax cookies on HTTPS, with a rolling 30-day maximum age. Browser refresh-token handling remains in the supported Supabase client. An existing local-storage session is migrated to cookies when possible. These browser-readable auth cookies are not HttpOnly; the app does not claim otherwise. Clearing cookies, private browsing, session revocation or provider policies can still require sign-in again.
+
+Background study synchronization merges only changed records. It does not reapply reading preferences, navigate, reload a chapter or recreate the study panel. Focused note edits and pending changes are protected. The UI updates only note markers/highlights and an unfocused selected-note field. Messages poll while their conversation is open and update only the message list, preserving the compose field and scroll position unless near the end.
+
+## Policy pages
+`/terms/`, `/privacy/`, `/cookies/`, `/guidelines/`, `/accessibility/` and `/contact/` are built from `scripts/legal.mjs`. They describe implemented behavior rather than promising certified compliance. Accounts/community are for ages 16+. Signup and profile forms request acceptance of the current terms and link the notices. Contact/report forms route to a private database queue; public GitHub issues are reserved for non-sensitive bugs. The operator must maintain truthful notices and handle incoming reports/privacy requests.
