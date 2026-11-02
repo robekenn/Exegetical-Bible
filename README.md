@@ -37,7 +37,7 @@ Supabase email/password accounts support sign-up, confirmation, login, password 
 
 `db/schema.sql` enables owner-only row-level security on both account tables. The save RPC runs with the caller's permissions and derives ownership from `auth.uid()`. Anonymous users cannot access account data. `/api/config` exposes only the project's public URL and publishable key. Service keys never enter the browser bundle. No analytics.
 
-The Vercel build applies the initial schema in a transaction, then verifies owner-only reads/writes and anonymous access denial with temporary fixtures that are rolled back. Subsequent builds preserve existing schema/data.
+The Vercel build applies the initial schema in a transaction, then verifies owner-only reads/writes and anonymous access denial with temporary fixtures that are rolled back. A second check creates two temporary confirmed test accounts without sending email, exercises password sign-in, saved-note restoration, conflicts, preferences and logout through the actual Supabase API, and removes those test accounts. Subsequent builds preserve existing schema/data.
 
 ## Required configuration
 Connect Supabase using the Vercel Marketplace. The build uses `POSTGRES_URL_NON_POOLING` (or `POSTGRES_URL`). The browser uses `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (or the equivalent Supabase variables), returned by `/api/config`.
