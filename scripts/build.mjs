@@ -6,3 +6,6 @@ for(const p of ['index.html','style.css','app.js','account.js','sync-model.js','
 console.log('Built static app and bundled Supabase client.');
 
 await import('./legal.mjs');
+
+await mkdir('dist/admin',{recursive:true});
+for(const p of ['index.html','admin.js','admin.css'])await copyFile('admin/'+p,'dist/admin/'+p);
