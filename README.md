@@ -70,3 +70,8 @@ Background study synchronization merges only changed records. It does not reappl
 
 ## Policy pages
 `/terms/`, `/privacy/`, `/cookies/`, `/guidelines/`, `/accessibility/` and `/contact/` are built from `scripts/legal.mjs`. They describe implemented behavior rather than promising certified compliance. Accounts/community are for ages 16+. Signup and profile forms request acceptance of the current terms and link the notices. Contact/report forms route to a private database queue; public GitHub issues are reserved for non-sensitive bugs. The operator must maintain truthful notices and handle incoming reports/privacy requests.
+
+## Phone layout
+At widths up to 760px, the app uses a dedicated five-tab bottom bar (Read, Study, Notebook, Friends, Account), a sticky passage toolbar and a full-screen searchable book/chapter picker. Tapping a verse opens the study drawer over the reader; close it to return to the same reading position. The drawer traps keyboard focus and closes with Escape or its close button. Draft fields remain mounted while switching between reading and study.
+
+Account, notebook, profile and conversation dialogs use full-screen phone panels. Controls are larger, form text avoids iOS input zoom, and padding accounts for device safe areas. Visual viewport height helps panels fit above a mobile keyboard. Desktop retains the three-column workspace. The automated phone interaction test checks drawer controls, draft preservation, book filtering and chapter navigation without creating user data.

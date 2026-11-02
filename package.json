@@ -18,5 +18,8 @@
     "@supabase/supabase-js": "^2.118.0",
     "esbuild": "^0.28.2",
     "postgres": "^4.0.0"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.3"
   }
 }
