@@ -17,3 +17,14 @@ test('phone navigation preserves drafts, opens study, and chooses a chapter with
  document.getElementById('mobilePassageButton').click();assert.equal(document.body.classList.contains('mobile-study-open'),false);assert.equal(document.querySelectorAll('[data-mobile-book]').length,2);
  document.getElementById('mobileBookSearch').value='gen';document.getElementById('mobileBookSearch').dispatchEvent(new w.Event('input'));assert.equal(document.querySelectorAll('[data-mobile-book]').length,1);document.querySelector('[data-mobile-book="GEN"]').click();assert.equal(document.querySelectorAll('[data-mobile-chapter]').length,50);document.querySelector('[data-mobile-chapter="3"]').click();assert.deepEqual(navigated,['GEN',3]);assert.equal(document.getElementById('draft').value,'Keep this draft');dom.window.close();
 });
+
+test('desktop passage picker uses themed book and chapter controls with a current-book shortcut',async()=>{
+ const html=await readFile(new URL('../index.html',import.meta.url),'utf8'),dom=new JSDOM(html,{url:'https://example.test/'}),w=dom.window;w.scrollTo=()=>{};
+ Object.assign(globalThis,{window:w,document:w.document,MutationObserver:w.MutationObserver,CustomEvent:w.CustomEvent,matchMedia:()=>({matches:false,addEventListener(){}})});
+ const state={book:'JHN',chapter:2,verse:1,books:[{id:'JHN',name:'John',order:43,numberOfChapters:21}]};let navigated;
+ const modal=(title,html)=>{document.getElementById('modalBody').innerHTML=html;};document.getElementById('modal').close=()=>{};
+ setupMobile({state,modal,esc:s=>String(s),navigate:(...v)=>navigated=v,toast:()=>{}});
+ document.getElementById('mobilePassageButton').click();document.getElementById('pickerCurrentChapter').click();
+ assert.equal(document.querySelector('[data-mobile-chapter="2"]').getAttribute('aria-current'),'true');
+ document.querySelector('[data-mobile-chapter="3"]').click();assert.deepEqual(navigated,['JHN',3]);assert.equal(document.getElementById('mobilePassageButton').classList.contains('mobile-only'),false);dom.window.close();
+});
