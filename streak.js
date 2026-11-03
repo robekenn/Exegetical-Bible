@@ -16,7 +16,7 @@ const flame='<svg viewBox="0 0 48 56" aria-hidden="true"><path fill="#e89b43" d=
 export function setupStreak({modal,changed,canRead,read,write,toast}){
  let owner=null,record={},elapsed=0,lastTick=Date.now();const key=()=>owner?'exegetical-user-'+owner+'-streak':'exegetical-streak';const root=document.getElementById('readingStreak');
  function snapshot(){return mergeStreak(record);}
- function render(){const s=streakStats(record);root.innerHTML=`${flame}<span><strong>${s.current} day${s.current===1?'':'s'}</strong><small>${s.today?'Today’s reading counted':'Your reading streak'}</small></span><span class="streak-week" aria-hidden="true">${s.week.map(d=>`<i class="${d.done?'done':''}"></i>`).join('')}</span>`;root.setAttribute('aria-label',`${s.current} day reading streak. ${s.today?'Today counted.':'Read for 30 active seconds to count today.'} View progress`);}
+ function render(){const s=streakStats(record);root.innerHTML=`${flame}<strong>${s.current}</strong><span class="sr-only">day${s.current===1?'':'s'}</span>`;root.setAttribute('aria-label',`${s.current} day reading streak. ${s.today?'Today counted.':'Read for 30 active seconds to count today.'} View progress`);}
  function persist(){record=snapshot();write(key(),record);render();}
  function merge(remote){record=mergeStreak(record,remote);persist();}
  document.addEventListener('study-auth-changed',e=>{owner=e.detail?.id||null;record=mergeStreak(read(key(),{}));elapsed=0;lastTick=Date.now();render();});
