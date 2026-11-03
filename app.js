@@ -1,3 +1,4 @@
+import {setupForegroundScroll} from './foreground-scroll.js';
 import {setupPassageHighlights} from './passage-highlights.js';
 import {setupStreak} from './streak.js';
 import {setupMobile} from './mobile.js';
@@ -67,6 +68,7 @@ $('sources').onclick=()=>modal('Rooted in good sources',`<div class="modal-copy"
 async function init(){noteCount();try{const [translations,commentaries,features]=await Promise.all([api('available_translations.json'),api('available_commentaries.json'),fetch('/api/config').then(r=>r.json())]);if(features.esvEnabled)translations.translations.unshift({id:'ESV',name:'English Standard Version',englishName:'English Standard Version',shortName:'ESV',language:'eng',languageEnglishName:'English'});state.translations=translations.translations.sort((a,b)=>(a.language==='eng'?0:1)-(b.language==='eng'?0:1)||(a.englishName||a.name).localeCompare(b.englishName||b.name));state.commentaries=commentaries.commentaries;if(!state.translations.some(t=>t.id===state.translation))state.translation='BSB';await getBooks();await loadChapter();}catch(e){showError($('chapterText'),e,init);}}
 let streak,highlightTools;
 async function start(){
+ setupForegroundScroll();
  highlightTools=setupPassageHighlights({state,save,renderChapter,canEdit:()=>!account||account.canEdit(),toast});
  streak=setupStreak({modal,toast,read:stored,write:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}},changed:()=>account?.preferencesChanged(),canRead:()=>Boolean(state.data)&&(!account||account.canEdit())});
  setupMobile({state,modal,esc,navigate,toast});
