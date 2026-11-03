@@ -75,3 +75,6 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 #togglePassageHighlights{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:44px;min-height:44px}#togglePassageHighlights .highlighter-icon{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}#togglePassageHighlights[aria-pressed=true] .highlighter-icon{fill:var(--gold);fill-opacity:.22}.highlighter-check{font-size:11px}#passageHighlights .highlight-heading{padding:3px 5px}
 
 #passageHighlights.is-highlighting{display:inline-block;width:max-content;max-width:100%;border-radius:22px}
+
+/* Active highlighter fills the complete visible pill, including its outer padding. */
+#passageHighlights.is-highlighting{background:var(--soft);border-color:var(--accent)}#passageHighlights.is-highlighting .highlight-heading{background:transparent}#togglePassageHighlights[aria-pressed=true]{background:transparent;color:var(--accent)}
