@@ -73,3 +73,5 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 #passageHighlights{position:sticky;top:74px;z-index:6;background:var(--paper);box-shadow:0 3px 12px #0000000d}#passageHighlights:not(.is-highlighting){border-radius:22px;width:max-content;max-width:100%}#passageHighlights .highlight-heading{margin:0}@media(max-width:760px){#passageHighlights{top:calc(74px + env(safe-area-inset-top,0px))}}
 
 #togglePassageHighlights{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-width:44px;min-height:44px}#togglePassageHighlights .highlighter-icon{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}#togglePassageHighlights[aria-pressed=true] .highlighter-icon{fill:var(--gold);fill-opacity:.22}.highlighter-check{font-size:11px}#passageHighlights .highlight-heading{padding:3px 5px}
+
+#passageHighlights.is-highlighting{display:inline-block;width:max-content;max-width:100%;border-radius:22px}
