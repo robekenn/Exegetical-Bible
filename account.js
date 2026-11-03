@@ -26,7 +26,7 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
  // Pending edits retain their original base revision across reloads, so stale edits conflict safely.
  const savedRevs=localRead(prefix()+'-revisions',{});for(const [k,p]of dirty){revisions.set(k,Number(savedRevs[k]||0));if(p.text)cloud.notes[k]=p;else delete cloud.notes[k];if(p.highlighted)cloud.highlights[k]=true;else delete cloud.highlights[k];}
  state.notes=cloud.notes;state.highlights=cloud.highlights;lastSnapshot=currentPayloads();ready=true;cache();refresh();display();
- const {data:prefs,error}=await client.from('study_preferences').select('settings').eq('user_id',user.id).maybeSingle();if(id!==epoch)return;if(!error&&prefs)await applyPreferences(prefs.settings);push();
+ const {data:prefs,error}=await client.from('study_preferences').select('settings').eq('user_id',user.id).maybeSingle();if(id!==epoch)return;if(!error){if(prefs)await applyPreferences(prefs.settings);preferencesChanged();}push();
  }catch(e){if(id!==epoch)return;syncError=e.message;toast('Could not load your account. Your saved device copy is available; open My account to retry.');display();refresh();}}
  function rememberRevisions(){if(user)localWrite(prefix()+'-revisions',Object.fromEntries(revisions));}
  function mutate(){rememberRevisions();changed();}
