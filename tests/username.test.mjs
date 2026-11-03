@@ -13,7 +13,7 @@ test('real profile form accepts mixed case and padding, saves normalized names, 
  const enter=value=>{input.value=value;input.dispatchEvent(new dom.window.Event('input'));};
  for(const value of ['kenneth_robertson','Kenneth_Robertson',' Kenneth_Robertson ','abc','a'.repeat(24)]){enter(value);assert.equal(form.checkValidity(),true,value);}
  enter(' Kenneth_Robertson ');await form.onsubmit({preventDefault(){}});assert.equal(saved.username,'kenneth_robertson');assert.equal(document.getElementById('profileStatus').textContent,'Profile saved.');
- for(const value of ['ab','a'.repeat(25),'kenneth robertson','@kenneth','kenneth-name','kenneth.name']){enter(value);assert.equal(form.checkValidity(),false,value);assert.match(input.validationMessage,/Example: kenneth_robertson/);}
+ for(const value of ['ab','a'.repeat(25),'kenneth robertson','@kenneth','kenneth-name','kenneth.name']){enter(value);assert.equal(form.checkValidity(),false,value);assert.match(input.validationMessage,/3–24/);}
  enter('');assert.equal(form.checkValidity(),false);enter(' KENNETH_1 ');input.dispatchEvent(new dom.window.Event('blur'));assert.equal(input.value,'kenneth_1');assert.equal(input.getAttribute('aria-invalid'),'false');
- assert.match(document.getElementById('usernameHelp').textContent,/3–24/);dom.window.close();
+ assert.match(document.getElementById('usernameHelp').textContent,/3–24/);assert.equal(document.getElementById('usernameHelp').textContent.includes('kenneth_robertson'),false);assert.equal(input.placeholder,'Choose a username');dom.window.close();
 });
