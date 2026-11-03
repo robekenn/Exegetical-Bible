@@ -62,3 +62,6 @@
 
 /* Search inputs must not inherit the zero-width flex sizing used by older phone forms. */
 .community-space #findFriend{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:stretch;gap:10px}.community-space #findFriend #friendUsername{width:100%;min-width:0;min-height:48px;box-sizing:border-box;flex:none;font-size:16px;line-height:1.5;padding:12px 14px}.community-space #findFriend button{min-height:48px}@media(max-width:760px){.community-space #findFriend{grid-template-columns:minmax(0,1fr)}.community-space #findFriend #friendUsername{width:100%;min-height:50px}}
+
+/* A single foreground scroll container; the reader remains fixed behind it. */
+dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll-behavior:none;padding:0;max-height:85dvh}#modal .modal-top{flex:0 0 auto;padding:22px 26px;margin:0;border-bottom:1px solid var(--line)}#modalBody{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;padding:24px 26px}.study-body,.message-thread{overscroll-behavior-y:contain}@media(max-width:760px){dialog#modal[open]{height:var(--mobile-viewport,100dvh);max-height:100dvh}#modal .modal-top{padding:calc(14px + env(safe-area-inset-top)) 20px 14px}#modalBody{padding:22px 22px calc(24px + env(safe-area-inset-bottom))}}
