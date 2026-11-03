@@ -4,7 +4,7 @@ export function verseLink(v){if(!v||!/^[A-Z0-9]{3}$/.test(v.book)||!Number.isInt
 
 // Validate the same normalized value used by the save path, before native form validation.
 export function bindUsernameField(input){
- const validate=()=>{const value=input.value.trim().toLowerCase();const valid=validUsername(value);input.setCustomValidity(!value||valid?'':'Use 3–24 letters, numbers or underscores, without spaces or @. Example: kenneth_robertson.');input.setAttribute('aria-invalid',String(Boolean(value)&&!valid));};
+ const validate=()=>{const value=input.value.trim().toLowerCase();const valid=validUsername(value);input.setCustomValidity(!value||valid?'':'Use 3–24 letters, numbers or underscores, without spaces or @.');input.setAttribute('aria-invalid',String(Boolean(value)&&!valid));};
  input.addEventListener('input',validate);
  input.addEventListener('blur',()=>{input.value=input.value.trim().toLowerCase();validate();});
  validate();
