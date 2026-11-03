@@ -17,6 +17,7 @@
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.118.0",
     "esbuild": "^0.28.2",
+    "parse5": "^8.1.0",
     "postgres": "^4.0.0"
   },
   "devDependencies": {
