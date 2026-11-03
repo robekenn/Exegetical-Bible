@@ -1,8 +1,9 @@
+import {sessionResult} from './security-model.js';
 import {renderAccountAvatar} from './account-avatar.js';
 import {normalizeProfile,verseLink,bindUsernameField} from './community-model.js';
 export function createCommunity({account,state,esc,modal,toast,openVerse}){
  const $=id=>document.getElementById(id);const db=()=>account.getClient();const me=()=>account.getUser();let profile=null,people=new Map(),friends=[],blocks=[],conversation=null,view='',page=0,polling=false;
- const run=async request=>{const {data,error}=await request;if(error)throw Error(error.message);return data;};
+ const run=request=>sessionResult(request,me);
  const act=(action,args={})=>run(db().rpc('community_action',{p_action:action,...args}));
  const name=id=>people.get(id)?.display_name||'Study friend';
  const avatar=p=>p?.avatar?`<img class="profile-avatar" src="${esc(p.avatar)}" alt="${esc(p.display_name||'Profile')} picture">`:`<span class="profile-avatar initials" aria-hidden="true">${esc((p?.display_name||'?').slice(0,1).toUpperCase())}</span>`;
