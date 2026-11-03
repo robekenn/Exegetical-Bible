@@ -68,3 +68,6 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 
 /* Minimal highlighter: toggle on, tap verses, done. */
 .passage-highlights{display:inline-block;margin:6px 0 20px;background:var(--paper);max-width:100%;vertical-align:top}.passage-highlights .highlight-heading{display:flex;flex-direction:row;align-items:center;gap:8px;padding:4px 7px}.passage-highlights .highlight-heading button{font-size:12px;white-space:nowrap;min-height:40px}.passage-highlights .highlight-heading>span{padding:0 7px 0 0;font-size:11px;line-height:1.5}.passage-highlights.is-highlighting{display:block;position:sticky;top:74px;z-index:6;background:var(--paper);border-color:var(--accent);box-shadow:0 3px 12px #0000000d}.passage-highlights.is-highlighting button{background:var(--soft);color:var(--accent)}@media(max-width:760px){.passage-highlights.is-highlighting{top:74px}.passage-highlights .highlight-heading>span{font-size:10px}}
+
+/* Keep Highlight/Done available throughout the chapter, not just in active mode. */
+#passageHighlights{position:sticky;top:74px;z-index:6;background:var(--paper);box-shadow:0 3px 12px #0000000d}#passageHighlights:not(.is-highlighting){border-radius:22px;width:max-content;max-width:100%}#passageHighlights .highlight-heading{margin:0}@media(max-width:760px){#passageHighlights{top:calc(74px + env(safe-area-inset-top,0px))}}
