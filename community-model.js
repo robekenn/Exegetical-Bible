@@ -9,3 +9,5 @@ export function bindUsernameField(input){
  input.addEventListener('blur',()=>{input.value=input.value.trim().toLowerCase();validate();});
  validate();
 }
+
+export function normalizeFriendUsername(value){const username=String(value||'').trim().replace(/^@/,'').toLowerCase();if(!validUsername(username))throw Error('Enter an exact username: 3–24 letters, numbers or underscores. You can include @ at the start.');return username;}
