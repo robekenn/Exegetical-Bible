@@ -86,3 +86,7 @@ Open `/admin/` after signing in to your usual Bible account. The account menu al
 4. Redeploy the latest production deployment so the new variable takes effect. Sign in at the Bible site and open `/admin/`.
 
 Filter open/in-review/resolved/dismissed reports, inspect evidence, and record a decision note. This covers abuse reports and support/privacy/accessibility requests. Statuses do not themselves ban accounts, delete messages, or notify users. Internal review notes are not returned to reporters. Removing a UID from the allowlist and redeploying revokes portal access. Keep admin accounts secure; never grant access based on user-editable profile fields.
+
+
+## Security
+See [SECURITY.md](SECURITY.md) for implemented protections, review limits, credential rotation, account hardening and incident reporting. Explicit sign-out clears the signed-in account’s local application cache after pending notes sync.
