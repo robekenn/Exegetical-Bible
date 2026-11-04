@@ -90,3 +90,13 @@ Filter open/in-review/resolved/dismissed reports, inspect evidence, and record a
 
 ## Security
 See [SECURITY.md](SECURITY.md) for implemented protections, review limits, credential rotation, account hardening and incident reporting. Explicit sign-out clears the signed-in account’s local application cache after pending notes sync.
+
+
+## Gmail account email delivery
+Supabase sends confirmation/reset emails; the website does not need an SMTP password in Vercel or source code.
+
+In Supabase Authentication → Emails → SMTP Settings, use sender `exegeticalbible@gmail.com`, sender name `Exegetical Bible`, host `smtp.gmail.com`, port `465`, and username `exegeticalbible@gmail.com`. The account owner must enable Google 2-Step Verification, create an App Password named for Supabase, enter it directly into the Supabase Password field, then save. Never use or share the normal Google password. Do not put the App Password in GitHub/chat. Setup is incomplete until a real confirmation/reset email reaches the intended inbox; no automated email test or new production account is created by builds.
+
+The production Site URL is `https://exegetical-bible.vercel.app` and the primary redirect is `/auth/callback`. Confirm email is enabled in Supabase. Keep password-policy settings and frontend signup/recovery requirements aligned (12 characters for new passwords; existing sign-in stays compatible).
+
+Reading-preference writes are queued and serialized, with a device copy retained until the account confirms a save. Saving feedback includes failed/offline preference writes and retries on reconnection or return to the page. Pending preferences prevent sign-out from discarding a streak or reading-position change.
