@@ -24,3 +24,22 @@ Live Supabase RLS/auth settings were not independently inspected in this review:
 This app uses a browser Supabase client with persistent, JavaScript-readable session cookies; they cannot be made HttpOnly while retaining this architecture. A future server-session/BFF migration can reduce token exposure if an XSS vulnerability occurs. Notes and messages are access-controlled but not end-to-end encrypted. Pending notes remain on a device when explicit sign-out is refused because synchronization failed; export/sync them before leaving a shared device. Already-existing cached copies from older sessions are not remotely erased.
 
 Report vulnerabilities privately through the site's support form or directly to the operator; do not post private data or tokens in public GitHub issues.
+
+## Account-email follow-up (November 2026)
+The operator confirmed Gmail password-reset delivery after replacing rejected SMTP credentials. Custom SMTP uses `smtp.gmail.com:465`; the App Password remains only in Supabase. Password-change and email-address-change notification emails are enabled. Confirmation and secure email change remain enabled, along with secure password change and a 12-character minimum for new passwords. Exact production callback URLs are configured.
+
+Reading preferences now retain an account-specific pending copy until the server confirms saving. Requests are serialized, retry after reconnect, and participate in saving feedback and sign-out protection. Tests cover concurrent changes and failed retries. These tests do not certify email deliverability or live database isolation.
+
+The dashboard reported no advisor issues, but that is not an independent RLS audit. The current Free plan has no managed backups; leaked-password protection requires Pro. CAPTCHA and custom edge rate limits remain unconfigured. No paid upgrade, credential rotation, production export or restore was performed.
+
+## Backup and recovery checklist
+Source code in GitHub and an individual's notebook export are not a complete database backup. Choose either managed daily backups on a paid Supabase plan or an operator-run encrypted off-site backup process. Follow the current [Supabase backup guide](https://supabase.com/docs/guides/platform/backups) and [CLI backup/restore guide](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore).
+
+Before calling backups operational:
+1. Select a private encrypted destination and retention policy. Keep database credentials and recovery keys outside source control; never upload plaintext database dumps as GitHub artifacts or Library files.
+2. Export roles, schema and data using the documented Supabase process. Verify Auth identities, application records, grants, policies, functions and triggers are covered; do not assume a default schema dump contains them all. Back up Storage objects separately if used.
+3. Record project, timestamp, tool version, encrypted archive checksum and completion/failure status without user records or secrets in logs. Restrict access and confirm a backup actually exists.
+4. Restore to an isolated non-production project with outbound email disabled. Verify row counts, notes/highlights, preferences, profiles, friend relationships, messages, reports and admin audit history. Check owner/participant isolation and anonymous denial using disposable test identities.
+5. Record the restore result and recovery time. Repeat after schema changes and periodically. Never test by overwriting production.
+
+Until the first verified backup and isolated restore succeed, disaster recovery remains incomplete. The project has not selected or provisioned a backup destination or a schedule.
