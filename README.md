@@ -35,7 +35,7 @@ Commentary entries are section-based: the panel identifies the starting verse ra
 ## Accounts and privacy
 Supabase email/password accounts support sign-up, confirmation, login, password recovery, and sign-out. Each account stores its notes/highlights separately from guest data. An explicit account action copies guest notes. Reading position, translation, theme and size sync as preferences. Notes use per-passage revisions; conflicting edits on another device require a choice rather than silently overwriting content. Pending writes are retained in an account-specific device cache and retried on reconnect. Account saving must finish before sign-out. Guest notes remain usable without an account.
 
-`db/schema.sql` enables owner-only row-level security on both account tables. The save RPC runs with the caller's permissions and derives ownership from `auth.uid()`. Anonymous users cannot access account data. `/api/config` exposes only the project's public URL and publishable key. Service keys never enter the browser bundle. No analytics.
+`db/schema.sql` enables owner-only row-level security on both account tables. The save RPC runs with the caller's permissions and derives ownership from `auth.uid()`. Anonymous users cannot access account data. `/api/config` exposes only the project's public URL and publishable key. Service keys never enter the browser bundle. Production usage/performance measurement uses Vercel Web Analytics and Speed Insights; private routes and URL parameters are excluded. See the privacy notice and measurement controls.
 
 The initial schema was applied in a transaction and owner-only reads/writes plus anonymous access denial were verified with rolled-back fixtures. Normal deployment builds only bundle static assets; they do not migrate the database or create test users. `npm run db:migrate` is an explicit maintenance operation, separate from deployment. The verification helper scripts are intended for a separate test project and are not run automatically against production.
 
@@ -100,3 +100,20 @@ In Supabase Authentication → Emails → SMTP Settings, use sender `exegeticalb
 The production Site URL is `https://exegetical-bible.vercel.app` and the primary redirect is `/auth/callback`. Confirm email is enabled in Supabase. Keep password-policy settings and frontend signup/recovery requirements aligned (12 characters for new passwords; existing sign-in stays compatible).
 
 Reading-preference writes are queued and serialized, with a device copy retained until the account confirms a save. Saving feedback includes failed/offline preference writes and retries on reconnection or return to the page. Pending preferences prevent sign-out from discarding a streak or reading-position change.
+
+## Google sign-in and profile pictures
+The auth dialog offers Continue with Google using Supabase OAuth and the existing persistent-session callback. Availability comes from Supabase's public Auth settings; the button stays disabled with an explanation until Google is configured. The application requests only openid, email and profile scopes, never Gmail/Drive access. Existing email sign-in and recovery continue to work.
+
+Owner setup:
+1. In Google Auth Platform, configure the app branding/audience and create a Web application OAuth client. Use your own support email and the site's privacy/terms URLs. Publish the consent configuration as needed for general users; Testing mode may limit access to listed test users.
+2. Authorized JavaScript origin: `https://exegetical-bible.vercel.app`.
+3. Authorized redirect URI: `https://kafceboizdzwvwmecgat.supabase.co/auth/v1/callback` (Supabase's callback, not the website callback).
+4. Enter the Client ID and Client Secret directly in Supabase Authentication → Sign In / Providers → Google, enable Google and save. Keep nonce checking on and leave Allow users without an email off. Credentials must be created/entered by the owner; do not paste them into chat or commit them.
+5. Refresh the website and test Google sign-in, cancellation, returning sessions and an existing email account. Verify the resulting account identity before testing with valuable study data; the app does not merge different accounts itself.
+
+A new profile uses the signed-in Google identity's photo as its default. Only HTTPS image URLs on lh3–lh6.googleusercontent.com are allowed, sent without a referrer. Existing saved pictures (including an explicitly removed picture) take precedence. Use Google picture in Profile to replace one. Saving a new profile converts the Google photo to the same 256px WebP format as uploaded photos, so friends receive the stored copy under existing RLS rules. A conversion failure is explained and allows choosing/uploading another picture. No schema change is needed.
+
+## Vercel measurement
+Official `@vercel/analytics` and `@vercel/speed-insights` packages are bundled into a same-origin module. The main reader and public policy pages include it; the admin page does not. Production host is allowlisted. Auth callbacks and unknown/private paths never initialize measurement. Before-send filtering removes query strings/fragments (including passage parameters) and rejects private paths. No custom events or account identifiers are attached. GPC, Do Not Track and the Cookies page's per-browser opt-out prevent initialization; filters recheck preferences before sending.
+
+The privacy and storage notices describe the updated behavior. View results in the project's Vercel Analytics and Speed Insights tabs after visits and performance events arrive. No paid Plus upgrade is required or enabled by this change. Content blockers, privacy preferences, quotas and browser support can prevent collection. Google OAuth end-to-end verification remains pending until the owner configures credentials.
