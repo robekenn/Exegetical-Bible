@@ -81,3 +81,6 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 
 /* Highlighter stays within thumb reach and clear of the phone navigation. */
 #passageHighlights,#passageHighlights.is-highlighting{position:fixed;top:auto;right:24px;bottom:24px;left:auto;z-index:35;display:block;width:auto;max-width:none;margin:0;border-radius:50%;box-shadow:0 4px 18px #14281a26}#passageHighlights .highlight-heading{padding:4px}#togglePassageHighlights{width:48px;height:48px;padding:10px;border-radius:50%}@media(max-width:760px){#passageHighlights,#passageHighlights.is-highlighting{right:18px;bottom:calc(90px + env(safe-area-inset-bottom))}body.mobile-study-open #passageHighlights{display:none}}
+
+/* Equal dimensions in both states keep the floating control perfectly circular. */
+#passageHighlights,#passageHighlights:not(.is-highlighting),#passageHighlights.is-highlighting{width:56px;height:56px;min-width:56px;max-width:56px;padding:0;border-radius:50%}#passageHighlights .highlight-heading{width:100%;height:100%;padding:3px;display:flex;align-items:center;justify-content:center;border-radius:50%}#togglePassageHighlights{width:48px;height:48px;min-width:48px;min-height:48px;margin:0;border-radius:50%;flex-shrink:0}
