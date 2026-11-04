@@ -31,7 +31,7 @@ test('all account email flows preserve supported verification variables and safe
     assert.equal(doc.querySelector('script, img, form, iframe'), null);
     for (const a of doc.querySelectorAll('a')) {
       const href = a.getAttribute('href');
-      assert.ok(href === '{{ .ConfirmationURL }}' || href.startsWith('https://exegetical-bible.vercel.app/'), href);
+      assert.ok(href === '{{ .ConfirmationURL }}' || new URL(href).origin === 'https://exegetical-bible.vercel.app', href);
     }
     assert.ok(!t.subject.includes('{{'), 'Keep verification secrets out of subject previews');
     if (t.security) assert.ok(doc.body.textContent.includes("Wasn't you?"));
