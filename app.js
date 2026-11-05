@@ -171,7 +171,87 @@ $('translationButton').onclick=()=>{
  $('pickerTranslationSearch').focus();
 };
 function exportNotes(){const blob=new Blob([JSON.stringify({format:'exegetical-backup',version:1,exportedAt:new Date().toISOString(),notes:state.notes,highlights:state.highlights},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='exegetical-notes-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
-function notebook(){const entries=Object.entries(state.notes).sort((a,b)=>(b[1].updatedAt||'').localeCompare(a[1].updatedAt||''));modal('My notebook',`<p class="muted">Your observations, questions, and prayers. ${account?.isUser()?'Saved to your private account.':'Saved in this browser. Sign in for account saving.'}</p><div class="button-row"><button id="exportNotes" class="primary">Export backup</button><button id="importNotes">Import backup</button><input id="importFile" type="file" accept="application/json,.json" hidden></div><input id="noteSearch" class="full-input" placeholder="Search your notes…" aria-label="Search your notes"><div id="noteList"></div>`);const render=()=>{const q=$('noteSearch').value.toLowerCase();$('noteList').innerHTML=entries.filter(([k,n])=>(n.text+' '+n.bookName+' '+n.chapter+':'+n.verse).toLowerCase().includes(q)).map(([k,n])=>`<article class="notebook-entry"><button data-note="${esc(k)}">${esc(n.bookName)} ${n.chapter}:${n.verse} ↗</button><p>${esc(n.text)}</p><small class="muted">${esc(new Date(n.updatedAt).toLocaleDateString())}</small></article>`).join('')||'<p class="muted">No notes here yet. Select a verse, open Notes, and start a thought.</p>';document.querySelectorAll('[data-note]').forEach(b=>b.onclick=()=>{const n=state.notes[b.dataset.note];$('modal').close();state.tab='notes';document.querySelectorAll('[data-tab]').forEach(x=>x.setAttribute('aria-selected',String(x.dataset.tab==='notes')));navigate(n.book,n.chapter,n.verse);});};$('noteSearch').oninput=render;render();$('exportNotes').onclick=exportNotes;$('importNotes').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{if(account&&!account.canEdit())throw Error('Load your account before importing.');const file=e.target.files[0];if(!file)return;if(file.size>5_000_000)throw Error('Please choose a backup smaller than 5 MB.');const d=JSON.parse(await file.text());if(d.format!=='exegetical-backup'||d.version!==1||!d.notes||typeof d.notes!=='object'||Array.isArray(d.notes))throw Error('This is not a valid Exegetical backup.');const imported={};for(const [k,n]of Object.entries(d.notes)){if(!/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}$/.test(k)||!n||typeof n.text!=='string'||n.text.length>200000||typeof n.bookName!=='string'||!Number.isInteger(n.chapter)||!Number.isInteger(n.verse)||`${n.book}.${n.chapter}.${n.verse}`!==k||typeof n.updatedAt!=='string'||!Number.isFinite(Date.parse(n.updatedAt)))throw Error('The backup contains invalid notes.');imported[k]=n;}let conflicts=Object.keys(imported).filter(k=>state.notes[k]&&state.notes[k].text!==imported[k].text);if(conflicts.length&&!confirm(`This backup replaces ${conflicts.length} existing note(s). Continue?`))return;state.notes={...state.notes,...imported};if(d.highlights&&typeof d.highlights==='object')for(const [k,v]of Object.entries(d.highlights))if(/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}$/.test(k)&&v===true)state.highlights[k]=true;save('exegetical-notes',state.notes);save('exegetical-highlights',state.highlights);noteCount();renderChapter();renderStudy();notebook();toast('Backup imported.');}catch(error){toast(error.message||'Could not import this backup.');}};}
+function highlightedPassages(highlights){
+ const verses=Object.entries(highlights).flatMap(([key,highlighted])=>{
+  const match=highlighted===true&&/^([A-Z0-9]{3})\.([1-9]\d{0,2})\.([1-9]\d{0,2})$/.exec(key);
+  return match?[{book:match[1],chapter:Number(match[2]),first:Number(match[3])}]:[];
+ });
+ const order=new Map(state.books.map((book,index)=>[book.id,index]));
+ verses.sort((a,b)=>(order.get(a.book)??Infinity)-(order.get(b.book)??Infinity)
+  ||a.book.localeCompare(b.book)||a.chapter-b.chapter||a.first-b.first);
+ const passages=[];
+ for(const verse of verses){
+  const previous=passages.at(-1);
+  if(previous?.book===verse.book&&previous.chapter===verse.chapter&&previous.last+1===verse.first){
+   previous.last=verse.first;
+  }else{
+   passages.push({...verse,last:verse.first});
+  }
+ }
+ return passages;
+}
+
+let notebookView='notes';
+function notebook(){
+ modal('My notebook',`<div class="notebook-views" role="group" aria-label="Notebook view">
+  <button type="button" data-notebook-view="notes">Notes</button>
+  <button type="button" data-notebook-view="highlights">Highlights</button>
+ </div>
+ <div class="button-row"><button id="exportNotes">Export backup</button><button id="importNotes">Import backup</button><input id="importFile" type="file" accept="application/json,.json" hidden></div>
+ <input id="noteSearch" class="full-input" type="search"><div id="noteList"></div>`);
+ const search=$('noteSearch'),list=$('noteList');
+ const controls=$('modalBody').querySelectorAll('[data-notebook-view]');
+ function render(){
+  const viewingHighlights=notebookView==='highlights';
+  const label=viewingHighlights?'Search highlights':'Search notes';
+  search.placeholder=label+'…';
+  search.setAttribute('aria-label',label);
+  controls.forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.notebookView===notebookView)));
+  const q=search.value.trim().toLowerCase();
+  if(viewingHighlights){
+   const names=new Map(Object.values(state.notes).map(note=>[note.book,note.bookName]));
+   const passages=highlightedPassages(state.highlights).map(passage=>{
+    const name=state.books.find(book=>book.id===passage.book)?.name||names.get(passage.book)||passage.book;
+    const range=passage.first===passage.last?String(passage.first):`${passage.first}–${passage.last}`;
+    return {...passage,label:`${name} ${passage.chapter}:${range}`};
+   }).filter(passage=>`${passage.label} ${passage.book}`.toLowerCase().includes(q.replace(/-/g,'–')));
+   list.innerHTML=passages.map((passage,index)=>`<article class="notebook-entry"><button type="button" data-highlight-passage="${index}">${esc(passage.label)} ↗</button></article>`).join('')
+    ||`<p class="muted">${q?'No matching highlights.':'No highlights yet.'}</p>`;
+   list.querySelectorAll('[data-highlight-passage]').forEach(button=>button.onclick=async()=>{
+    const passage=passages[Number(button.dataset.highlightPassage)];
+    const book=state.books.find(book=>book.id===passage.book);
+    if(!book||passage.chapter>book.numberOfChapters){
+     toast('This passage is unavailable in your current translation.');
+     return;
+    }
+    $('modal').close();
+    await navigate(passage.book,passage.chapter,passage.first);
+    if(state.data&&state.book===passage.book&&state.chapter===passage.chapter){
+     document.querySelector(`[data-verse="${state.verse}"]`)?.scrollIntoView({block:'center'});
+    }
+   });
+   return;
+  }
+  const entries=Object.entries(state.notes).sort((a,b)=>(b[1].updatedAt||'').localeCompare(a[1].updatedAt||''));
+  list.innerHTML=entries.filter(([,note])=>`${note.text} ${note.bookName} ${note.chapter}:${note.verse}`.toLowerCase().includes(q))
+   .map(([key,note])=>`<article class="notebook-entry"><button type="button" data-note="${esc(key)}">${esc(note.bookName)} ${esc(note.chapter)}:${esc(note.verse)} ↗</button><p>${esc(note.text)}</p><small class="muted">${esc(new Date(note.updatedAt).toLocaleDateString())}</small></article>`).join('')
+   ||`<p class="muted">${q?'No matching notes.':'No notes yet.'}</p>`;
+  list.querySelectorAll('[data-note]').forEach(button=>button.onclick=()=>{
+   const note=state.notes[button.dataset.note];
+   $('modal').close();
+   state.tab='notes';
+   document.querySelectorAll('[data-tab]').forEach(tab=>tab.setAttribute('aria-selected',String(tab.dataset.tab==='notes')));
+   navigate(note.book,note.chapter,note.verse);
+  });
+ }
+ controls.forEach(button=>button.onclick=()=>{
+  notebookView=button.dataset.notebookView;
+  search.value='';
+  render();
+ });
+ search.oninput=render;
+ render();
+ $('exportNotes').onclick=exportNotes;$('importNotes').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{if(account&&!account.canEdit())throw Error('Load your account before importing.');const file=e.target.files[0];if(!file)return;if(file.size>5_000_000)throw Error('Please choose a backup smaller than 5 MB.');const d=JSON.parse(await file.text());if(d.format!=='exegetical-backup'||d.version!==1||!d.notes||typeof d.notes!=='object'||Array.isArray(d.notes))throw Error('This is not a valid Exegetical backup.');const imported={};for(const [k,n]of Object.entries(d.notes)){if(!/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}$/.test(k)||!n||typeof n.text!=='string'||n.text.length>200000||typeof n.bookName!=='string'||!Number.isInteger(n.chapter)||!Number.isInteger(n.verse)||`${n.book}.${n.chapter}.${n.verse}`!==k||typeof n.updatedAt!=='string'||!Number.isFinite(Date.parse(n.updatedAt)))throw Error('The backup contains invalid notes.');imported[k]=n;}let conflicts=Object.keys(imported).filter(k=>state.notes[k]&&state.notes[k].text!==imported[k].text);if(conflicts.length&&!confirm(`This backup replaces ${conflicts.length} existing note(s). Continue?`))return;state.notes={...state.notes,...imported};if(d.highlights&&typeof d.highlights==='object')for(const [k,v]of Object.entries(d.highlights))if(/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}$/.test(k)&&v===true)state.highlights[k]=true;save('exegetical-notes',state.notes);save('exegetical-highlights',state.highlights);noteCount();renderChapter();renderStudy();notebook();toast('Backup imported.');}catch(error){toast(error.message||'Could not import this backup.');}};}
 $('notebookNav').onclick=notebook;$('readNav').onclick=()=>{document.body.classList.remove('focus');$('reader').scrollIntoView({behavior:'smooth'});};
 $('sources').onclick=()=>modal('Rooted in good sources',`<div class="modal-copy"><p><b>Bible translations and commentaries</b><br>Provided by the <a href="https://bible.helloao.org" target="_blank" rel="noopener noreferrer">Free Use Bible API, AO Lab</a>. Each translation and commentary retains its own source and license, linked within the reader. Availability and versification vary.</p><p><b>API.Bible translations</b><br>Additional editions are supplied through <a href="https://api.bible/" target="_blank" rel="noopener noreferrer">API.Bible</a> according to this site’s licensed access. Copyright notices accompany the text. Its required FUMS service reports Scripture views using anonymous device/session identifiers. See the <a href="/privacy/">privacy notice</a>.</p><p><b>Original languages</b><br>The Berean Bible interlinear is public domain. Brief Hebrew and Greek lexicons are from <a href="https://github.com/STEPBible/STEPBible-Data" target="_blank" rel="noopener noreferrer">STEPBible.org / Tyndale House, Cambridge</a>, under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>, adapted into the API format by AO Lab.</p><p>A dictionary gives a word’s range of meaning. Context determines how it is used in a particular passage. Historical commentaries reflect their authors’ perspectives.</p><p><b>ESV copyright</b><br>Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. The ESV text may not be quoted in any publication made available to the public by a Creative Commons license. The ESV may not be translated into any other language. Users may not copy or download more than 500 verses of the ESV Bible or more than one half of any book of the ESV Bible. <a href="https://www.esv.org/" target="_blank" rel="noopener noreferrer">ESV.org</a></p><p><b>Your notes</b><br>Sign in to save private notes, highlights, reading position, translation, and appearance to your account using Supabase. Database rules restrict records to their owner. Guest notes stay in this browser until you choose to copy them into an account. Account notes are cached separately by user on this device; sign out on shared devices. Export a backup at any time.</p><p><a href="https://github.com/robekenn/Exegetical-Bible" target="_blank" rel="noopener noreferrer">View the project on GitHub ↗</a></p></div>`);
 async function init(){noteCount();try{const [translations,commentaries,features,apiBibles]=await Promise.all([api('available_translations.json'),api('available_commentaries.json'),fetch('/api/config').then(r=>r.json()),api('available_api_bible.json').catch(e=>{apiBibleError=e.message;return {translations:[]};})]);translations.translations=[...translations.translations,...apiBibles.translations];if(features.esvEnabled)translations.translations.unshift({id:'ESV',name:'English Standard Version',englishName:'English Standard Version',shortName:'ESV',language:'eng',languageEnglishName:'English'});state.translations=translations.translations.sort((a,b)=>(a.language==='eng'?0:1)-(b.language==='eng'?0:1)||(a.englishName||a.name).localeCompare(b.englishName||b.name));state.commentaries=commentaries.commentaries;if(!state.translations.some(t=>t.id===state.translation))state.translation='BSB';await getBooks();await loadChapter();}catch(e){showError($('chapterText'),e,init);}}
