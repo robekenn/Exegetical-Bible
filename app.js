@@ -23,9 +23,7 @@ const favoriteKey='exegetical-favorite-translations';
 const savedFavorites=stored(favoriteKey,[]);
 const favorites=new Set(Array.isArray(savedFavorites)?savedFavorites.filter(id=>typeof id==='string'):[]);
 function refreshFavoriteControls(){
- for(const id of ['compareSelect','translationList']){
-  $(id)?.dispatchEvent(new Event('favorites-changed'));
- }
+ $('translationList')?.dispatchEvent(new Event('favorites-changed'));
 }
 function setFavorites(ids){
  favorites.clear();
@@ -97,33 +95,24 @@ async function renderStudy(){const id=++studyId;++wordId;const root=$('studyBody
 else if(state.tab==='language'){const d=await api(`d/bsb-interlinear/${state.book}/${state.chapter}.json`);if(id!==studyId)return;const words=d.chapter.content.find(v=>v.verse===state.verse)?.words||[];root.innerHTML=quote+`<div class="source-label">BEREAN INTERLINEAR · ${words[0]?.language==='hebrew'?'HEBREW':'GREEK'}</div><h3>Behind the words</h3><p class="muted">Select an original-language word for its definition and grammar. Glosses follow the Berean text; they aren’t a word-for-word mapping to every translation.</p><div class="word-grid" ${words[0]?.language==='hebrew'?'dir="rtl"':''}>${words.map((w,i)=>`<button class="word" data-word="${i}"><b>${esc(w.text)}</b><small dir="ltr">${esc(w.transliteration)}</small><span dir="ltr">${esc(w.gloss||'—')}</span></button>`).join('')}</div><div id="definition" aria-live="polite"></div><p class="attribution">Interlinear: Berean Bible, public domain. Definitions: <a href="https://github.com/STEPBible/STEPBible-Data" target="_blank" rel="noopener noreferrer">STEPBible / Tyndale House, Cambridge</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>. Data formatted by AO Lab.</p>`;root.querySelectorAll('[data-word]').forEach(b=>b.onclick=()=>loadWord(words[Number(b.dataset.word)],id));}
 else if(state.tab==='notes'){renderNotes(quote);}
 else if(state.tab==='compare'){
- const options=state.translations;const card=(label,text,dir='ltr')=>`<article class="translation-compare-card"><small>${esc(label)}</small><div dir="${dir==='rtl'?'rtl':'ltr'}">${esc(text)}</div></article>`;
- root.innerHTML=`<div class="compare-navigation"><button id="comparePrevious" aria-label="Previous verse">←</button><strong>${esc(ref())}</strong><button id="compareNext" aria-label="Next verse">→</button></div><label class="label" for="translationSearch">Find a translation</label><input id="translationSearch" class="full-input" placeholder="Search name, language or abbreviation…"><label class="sr-only" for="compareSelect">Compare with translation</label><div class="compare-translation-controls"><select id="compareSelect"></select><button type="button" id="compareFavorite" class="translation-favorite"></button></div><div class="comparison-pair">${card(state.data.translation.shortName||state.translation,flatten(verse.content),state.data.translation.textDirection)}<p class="attribution">${esc(state.data.translation.licenseNotice||'')}</p><div id="comparison" aria-live="polite"></div></div>`;
- const list=()=>{
-  const q=$('translationSearch').value.trim().toLowerCase();
-  const matches=options.filter(t=>t.id===state.compare||matchesTranslation(t,q));
-  const option=t=>`<option value="${esc(t.id)}">${esc(t.shortName||t.id)} · ${esc(t.englishName||t.name)} · ${esc(t.languageEnglishName||t.language)}</option>`;
-  const pinned=matches.filter(t=>favorites.has(t.id));
-  const others=matches.filter(t=>!favorites.has(t.id));
-  const select=$('compareSelect');
-  select.innerHTML=(pinned.length?`<optgroup label="Favorites">${pinned.map(option).join('')}</optgroup>`:'')
-   +(others.length?`<optgroup label="Translations">${others.map(option).join('')}</optgroup>`:'');
-  select.value=state.compare;
-  const selected=options.find(t=>t.id===state.compare);
-  const star=$('compareFavorite');
-  star.disabled=!selected;
-  star.textContent=selected&&favorites.has(selected.id)?'★':'☆';
-  star.setAttribute('aria-pressed',String(Boolean(selected&&favorites.has(selected.id))));
-  star.setAttribute('aria-label',selected?favoriteLabel(selected):'Favorite translation');
- };
- list();
- $('translationSearch').oninput=list;
- $('compareSelect').addEventListener('favorites-changed',list);
- $('compareFavorite').onclick=()=>{if(toggleFavorite(state.compare))list();};
+ const card=(label,text,dir='ltr')=>`<article class="translation-compare-card"><small>${esc(label)}</small><div dir="${dir==='rtl'?'rtl':'ltr'}">${esc(text)}</div></article>`;
+ root.innerHTML=`<div class="compare-navigation"><button id="comparePrevious" aria-label="Previous verse">←</button><strong>${esc(ref())}</strong><button id="compareNext" aria-label="Next verse">→</button></div><div class="compare-translation-controls"><span>Compare with</span><button type="button" id="compareTranslationButton" class="version-pill"></button></div><div class="comparison-pair">${card(state.data.translation.shortName||state.translation,flatten(verse.content),state.data.translation.textDirection)}<p class="attribution">${esc(state.data.translation.licenseNotice||'')}</p><div id="comparison" aria-live="polite"></div></div>`;
+ const compareButton=$('compareTranslationButton');
+ function updateCompareLabel(){
+  const edition=state.translations.find(t=>t.id===state.compare);
+  compareButton.textContent=(edition?.shortName||edition?.name||state.compare)+' ▾';
+ }
+ updateCompareLabel();
+ compareButton.onclick=()=>chooseTranslation('compare',edition=>{
+  if(id!==studyId)return;
+  state.compare=edition;
+  updateCompareLabel();
+  compare();
+ });
  const index=verses().findIndex(v=>v.number===state.verse);$('comparePrevious').disabled=index<=0;$('compareNext').disabled=index>=verses().length-1;
  for(const [button,step]of [['comparePrevious',-1],['compareNext',1]])$(button).onclick=()=>{state.verse=verses()[index+step].number;renderChapter();position();renderStudy();};
  let request=0;async function compare(){const token=++request;$('comparison').innerHTML='<p class="loading">Opening translation…</p>';try{const d=await api(`${state.compare}/${state.book}/${state.chapter}.json`);if(id!==studyId||token!==request)return;const v=d.chapter.content.find(v=>v.type==='verse'&&v.number===state.verse);$('comparison').innerHTML=card(d.translation.name,v?flatten(v.content):'This verse is not available in this translation.',d.translation.textDirection)+`<p class="attribution"><a href="${safeURL(d.translation.licenseUrl||d.translation.website)}" target="_blank" rel="noopener noreferrer">Translation source & license ↗</a>${d.translation.licenseNotice?'<br>'+esc(d.translation.licenseNotice):''}</p>`;if(v)reportBibleView(d);}catch(e){if(id===studyId&&token===request)showError($('comparison'),e,compare);}}
- $('compareSelect').onchange=e=>{state.compare=e.target.value;list();compare();};await compare();}}catch(e){if(id!==studyId)return;showError(root,e,renderStudy);}}
+ await compare();}}catch(e){if(id!==studyId)return;showError(root,e,renderStudy);}}
 async function loadWord(w,parent){const id=++wordId;const root=$('definition');root.innerHTML='<p class="loading">Opening lexicon…</p>';try{if(!w.strongs)throw Error('No dictionary identifier is supplied for this word.');const d=await api(`d/stepbible-lexicon/lexicon/${w.strongs}.json`);if(id!==wordId||parent!==studyId)return;const senses=d.entry?.senses||[];root.innerHTML=`<div class="lexicon"><div class="source-label">${esc(w.strongs)} · ${esc(w.parsingFull||w.parsing)}</div>${senses.map(s=>`<h3>${esc(s.lemma)} <small>${esc(s.transliteration)}</small></h3><b>${esc(s.gloss)}</b><p>${esc(s.definition)}</p>`).join('')||'<p>No definition available.</p>'}</div>`;}catch(e){if(id===wordId&&parent===studyId)showError(root,e,()=>loadWord(w,parent));}}
 function renderNotes(quote){const root=$('studyBody');const k=key();root.innerHTML=`<div class="study-tool-intro"><h3>Your thoughts on the Word.</h3><p class="muted">Private notes for ${esc(ref())}. Saved as you type.</p></div><details class="note-passage"><summary>Read the selected verse</summary>${quote}</details><div class="note-prompts"><button type="button" data-note-prompt="Observation">Observe</button><button type="button" data-note-prompt="Interpretation">Understand</button><button type="button" data-note-prompt="Application">Apply</button></div><label for="noteText" class="label">Observation, interpretation, application, or a question to revisit.</label><textarea id="noteText" maxlength="200000" class="study-note-editor" placeholder="What stands out? What does it mean? How will you respond?">${esc(state.notes[k]?.text||'')}</textarea><p class="save-status" id="saveStatus">${esc(account?.status()||'Saved on this device.')}</p><div class="button-row"><button id="highlightVerse">${state.highlights[k]?'Remove highlight':'Highlight verse'}</button><button id="copyVerse">Copy verse</button><button id="sendVerseToFriend">Send to friend</button></div><details class="note-more"><summary>More note options</summary><button id="deleteNote" class="danger">Delete this note</button></details><div></div><p class="muted">${account?.isUser()?'Private to your account. Notes and highlights sync across devices.':'Guest notes stay in this browser. Sign in to save them to an account.'} Export a backup from My notebook.</p>`;document.querySelectorAll('[data-note-prompt]').forEach(b=>b.onclick=()=>{if(account&&!account.canEdit())return;const editor=$('noteText');const addition=(editor.value.trim()?'\n\n':'')+b.dataset.notePrompt+':\n';if(editor.value.length+addition.length>200000)return;editor.value+=addition;editor.dispatchEvent(new Event('input'));editor.focus();editor.setSelectionRange(editor.value.length,editor.value.length);});$('noteText').disabled=Boolean(account&&!account.canEdit());$('noteText').oninput=e=>{if(account&&!account.canEdit())return;const text=e.target.value;if(text.trim())state.notes[k]={text,book:state.book,bookName:book().name,chapter:state.chapter,verse:state.verse,updatedAt:new Date().toISOString()};else delete state.notes[k];const ok=save('exegetical-notes',state.notes);$('saveStatus').textContent=ok?(account?.status()||'Saved on this device.'):'Could not save. Export a backup before leaving.';noteCount();renderChapter();};$('highlightVerse').onclick=()=>{if(account&&!account.canEdit())return toast('Load your account before editing.');if(state.highlights[k])delete state.highlights[k];else state.highlights[k]=true;save('exegetical-highlights',state.highlights);renderChapter();renderNotes(quote);};$('copyVerse').onclick=async()=>{try{await navigator.clipboard.writeText(`${ref()} (${state.translation})\n${flatten(verses().find(v=>v.number===state.verse)?.content)}`);toast('Verse copied.');}catch{toast('Clipboard unavailable in this browser.');}};$('sendVerseToFriend').onclick=()=>document.dispatchEvent(new CustomEvent('share-study-verse'));$('deleteNote').onclick=()=>{if(account&&!account.canEdit())return;if(!state.notes[k])return;if(confirm('Delete this note? Export a backup first if you need to keep it.')){delete state.notes[k];save('exegetical-notes',state.notes);noteCount();renderChapter();renderNotes(quote);}};}
 function noteCount(){$('noteCount').textContent=Object.keys(state.notes).length;}
@@ -137,13 +126,20 @@ $('focus').onclick=()=>{document.body.classList.toggle('focus');$('focus').setAt
 $('theme').onclick=()=>{document.body.classList.toggle('dark');save('exegetical-dark',document.body.classList.contains('dark'));};if(stored('exegetical-dark',false))document.body.classList.add('dark');
 document.documentElement.style.setProperty('--reading-size',stored('exegetical-size',20)+'px');
 $('settings').onclick=()=>{modal('Make yourself at home',`<p class="muted">Set a comfortable reading size.</p><label class="label" for="fontSize">Scripture text size</label><input id="fontSize" type="range" min="16" max="30" value="${stored('exegetical-size',20)}"><div class="button-row"><button id="themeSetting">Switch light / dark</button><button id="sharePassage">Copy passage link</button><a href="/feedback/">Feedback or bug report</a></div>`);$('fontSize').oninput=e=>{document.documentElement.style.setProperty('--reading-size',e.target.value+'px');save('exegetical-size',Number(e.target.value));};$('themeSetting').onclick=()=>$('theme').click();$('sharePassage').onclick=async()=>{try{await navigator.clipboard.writeText(location.href);toast('Passage link copied.');}catch{toast('Copy the link from your address bar.');}};};
-$('translationButton').onclick=()=>{
+function chooseTranslation(mode='reader',onCompare){
+ const comparing=mode==='compare';
+ const selected=comparing?state.compare:state.translation;
+ const returnToStudy=comparing&&document.body.classList.contains('mobile-study-open');
+
  const languages=[...new Map(state.translations.map(t=>[t.language,t.languageEnglishName||t.language]))]
   .filter(([id])=>id).sort((a,b)=>String(a[1]).localeCompare(String(b[1])));
- modal('Choose a translation',`<input id="pickerTranslationSearch" class="full-input" placeholder="Search translation, language, or abbreviation…" aria-label="Search translations"><label class="label" for="translationLanguage">Language</label><select id="translationLanguage" class="full-input"><option value="">All languages</option>${languages.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')}</select>${apiBibleError?`<p class="muted" role="status">${esc(apiBibleError)}</p>`:''}<div id="translationList"></div>`);
+ modal(comparing?'Choose a comparison translation':'Choose a translation',`<input id="pickerTranslationSearch" class="full-input" placeholder="Search translation, language, or abbreviation…" aria-label="Search translations"><label class="label" for="translationLanguage">Language</label><select id="translationLanguage" class="full-input"><option value="">All languages</option>${languages.map(([id,name])=>`<option value="${esc(id)}">${esc(name)}</option>`).join('')}</select>${apiBibleError?`<p class="muted" role="status">${esc(apiBibleError)}</p>`:''}<div id="translationList"></div>`);
+ if(returnToStudy)$('modal').addEventListener('close',()=>{
+  if(!$('modal').open&&state.tab==='compare')document.dispatchEvent(new CustomEvent('open-mobile-study'));
+ },{once:true});
  let limit=100;
  const root=$('translationList');
- const row=t=>`<div class="translation-row"><button type="button" class="translation-option" data-translation="${esc(t.id)}"${t.id===state.translation?' aria-current="true"':''}>${esc(t.englishName||t.name)} <small>${esc(t.languageEnglishName||t.language)} · ${esc(t.shortName||t.id)}${t.provider?' · '+esc(t.provider):''}${t.id===state.translation?' · Reading now':''}</small></button><button type="button" class="translation-favorite" data-favorite="${esc(t.id)}" aria-pressed="${favorites.has(t.id)}" aria-label="${esc(favoriteLabel(t))}">${favorites.has(t.id)?'★':'☆'}</button></div>`;
+ const row=t=>`<div class="translation-row"><button type="button" class="translation-option" data-translation="${esc(t.id)}"${t.id===selected?' aria-current="true"':''}>${esc(t.englishName||t.name)} <small>${esc(t.languageEnglishName||t.language)} · ${esc(t.shortName||t.id)}${t.provider?' · '+esc(t.provider):''}${t.id===selected?(comparing?' · Comparing now':' · Reading now'):''}</small></button>${comparing?'':`<button type="button" class="translation-favorite" data-favorite="${esc(t.id)}" aria-pressed="${favorites.has(t.id)}" aria-label="${esc(favoriteLabel(t))}">${favorites.has(t.id)?'★':'☆'}</button>`}</div>`;
  function render(){
   const q=$('pickerTranslationSearch').value.trim().toLowerCase();
   const language=$('translationLanguage').value;
@@ -160,9 +156,13 @@ $('translationButton').onclick=()=>{
    render();
    const replacement=[...root.querySelectorAll('[data-favorite]')].find(item=>item.dataset.favorite===id);
    (replacement||$('pickerTranslationSearch')).focus({preventScroll:true});
-   $('compareSelect')?.dispatchEvent(new Event('favorites-changed'));
   });
   root.querySelectorAll('[data-translation]').forEach(button=>button.onclick=async()=>{
+   if(comparing){
+    $('modal').close();
+    onCompare(button.dataset.translation);
+    return;
+   }
    const previous=state.translation;
    state.translation=button.dataset.translation;
    $('modal').close();
@@ -184,7 +184,8 @@ $('translationButton').onclick=()=>{
  $('translationLanguage').onchange=reset;
  render();
  $('pickerTranslationSearch').focus();
-};
+}
+$('translationButton').onclick=()=>chooseTranslation();
 function openVerseSearch(query,root,beforeOpen=()=>{}){
  const supported=state.translations.filter(t=>/^(BSB|ESV|AB_[a-f0-9]{16}-[0-9]{2})$/.test(t.id));
  const current=supported.find(t=>t.id===state.translation);
@@ -287,6 +288,150 @@ function highlightedPassages(highlights){
  return passages;
 }
 
+function highlightNoteForm(card,passage,refreshNotes){
+ const panel=card.querySelector('[data-note-editor]');
+ if(!panel.hidden){panel.querySelector('textarea')?.focus();return;}
+ if(account&&!account.canEdit())return toast('Load your account before editing.');
+ panel.hidden=false;
+ const numbers=Array.from({length:passage.last-passage.first+1},(_,index)=>passage.first+index);
+ panel.innerHTML=`<form class="highlight-note-form">
+  ${numbers.length>1?`<label>Verse <select name="verse">${numbers.map(n=>`<option value="${n}">${n}</option>`).join('')}</select></label>`:''}
+  <label>Note <textarea name="text" maxlength="200000" required></textarea></label>
+  <div class="button-row"><button type="submit" class="primary">Save note</button><button type="button" data-cancel-note>Cancel</button></div>
+  <p class="muted" role="status"></p>
+ </form>`;
+ const form=panel.querySelector('form'),text=form.elements.text,select=form.elements.verse;
+ const message=form.querySelector('[role="status"]');
+ const owner=account?.getUser()?.id;
+ let verse=passage.first,original='';
+ const noteKey=()=>`${passage.book}.${passage.chapter}.${verse}`;
+ function load(){
+  verse=select?Number(select.value):passage.first;
+  original=state.notes[noteKey()]?.text||'';
+  text.defaultValue=original;
+  text.value=original;
+  message.textContent='';
+ }
+ if(select)select.onchange=()=>{
+  if(text.value!==original&&!confirm('Discard the unsaved changes for this verse?')){
+   select.value=String(verse);
+   return;
+  }
+  load();
+ };
+ function close(){
+  panel.replaceChildren();
+  panel.hidden=true;
+  card.querySelector('[data-add-highlight-note]').focus();
+ }
+ form.querySelector('[data-cancel-note]').onclick=close;
+ form.onsubmit=event=>{
+  event.preventDefault();
+  if(account?.getUser()?.id!==owner||account&&!account.canEdit()){
+   message.textContent='Your account changed. Reopen the notebook before saving.';
+   return;
+  }
+  const key=noteKey();
+  if((state.notes[key]?.text||'')!==original){
+   message.textContent='This note changed on another device. Copy your draft, then reopen the editor.';
+   return;
+  }
+  if(!text.value.trim()){message.textContent='Enter a note before saving.';return;}
+  state.notes[key]={text:text.value,book:passage.book,bookName:passage.name,chapter:passage.chapter,verse,updatedAt:new Date().toISOString()};
+  const saved=save('exegetical-notes',state.notes);
+  original=text.value;
+  text.defaultValue=original;
+  noteCount();
+  renderChapter();
+  if(state.tab==='notes'&&key===`${state.book}.${state.chapter}.${state.verse}`)renderStudy();
+  refreshNotes();
+  if(saved){close();toast('Note saved.');}
+  else message.textContent='Could not save on this device. Export a backup before leaving.';
+ };
+ load();
+ text.focus();
+}
+
+function hasHighlightDraft(root){
+ return [...root.querySelectorAll('.highlight-note-form textarea')].some(text=>text.value!==text.defaultValue);
+}
+
+function renderHighlightCards(list,passages){
+ const translation=state.translation;
+ const chapterRequests=new Map();
+ const reported=new Set();
+ list.innerHTML=passages.map((passage,index)=>`<article class="notebook-entry notebook-highlight" data-highlight-card="${index}">
+  <h3>${esc(passage.label)}</h3>
+  <div class="notebook-highlight-text" data-highlight-text aria-live="polite"><p class="muted">Loading verse text…</p></div>
+  <div class="notebook-highlight-notes" data-highlight-notes></div>
+  <div class="button-row">
+   <button type="button" data-add-highlight-note>Add or edit note</button>
+   <button type="button" data-highlight-passage aria-label="Jump to ${esc(passage.label)}">Jump to passage ↗</button>
+  </div>
+  <div data-note-editor hidden></div>
+ </article>`).join('');
+ list.querySelectorAll('[data-highlight-card]').forEach(card=>{
+  const passage=passages[Number(card.dataset.highlightCard)];
+  const chapterKey=`${translation}/${passage.book}/${passage.chapter}.json`;
+  const text=card.querySelector('[data-highlight-text]');
+  const notes=card.querySelector('[data-highlight-notes]');
+  const current=()=>card.isConnected&&$('modal').open;
+  function refreshNotes(){
+   const entries=[];
+   for(let n=passage.first;n<=passage.last;n++){
+    const note=state.notes[`${passage.book}.${passage.chapter}.${n}`];
+    if(note?.text)entries.push(`<div><strong>Verse ${n}</strong><p>${esc(note.text)}</p></div>`);
+   }
+   notes.innerHTML=entries.length?'<h4>Notes</h4>'+entries.join(''):'';
+   notes.hidden=!entries.length;
+  }
+  refreshNotes();
+  card.querySelector('[data-add-highlight-note]').onclick=()=>highlightNoteForm(card,passage,refreshNotes);
+  card.querySelector('[data-highlight-passage]').onclick=async()=>{
+   if(hasHighlightDraft(list)&&!confirm('Leave the notebook and discard unsaved notes?'))return;
+   const book=state.books.find(book=>book.id===passage.book);
+   if(!book||passage.chapter>book.numberOfChapters){
+    toast('This passage is unavailable in your current translation.');
+    return;
+   }
+   $('modal').close();
+   await navigate(passage.book,passage.chapter,passage.first);
+   if(state.data&&state.book===passage.book&&state.chapter===passage.chapter){
+    document.querySelector(`[data-verse="${state.verse}"]`)?.scrollIntoView({block:'center'});
+   }
+  };
+  async function load(){
+   text.innerHTML='<p class="muted">Loading verse text…</p>';
+   if(!chapterRequests.has(chapterKey)){
+    chapterRequests.set(chapterKey,api(chapterKey).catch(error=>{
+     chapterRequests.delete(chapterKey);
+     throw error;
+    }));
+   }
+   try{
+    const data=await chapterRequests.get(chapterKey);
+    if(!current())return;
+    const verses=data.chapter.content.filter(v=>v.type==='verse'&&v.number>=passage.first&&v.number<=passage.last);
+    if(!verses.length){
+     text.innerHTML='<p class="muted">These verses are unavailable in the current translation.</p>';
+     return;
+    }
+    const t=data.translation;
+    text.innerHTML=`<div dir="${t.textDirection==='rtl'?'rtl':'ltr'}">${verses.map(v=>`<p><sup>${esc(v.number)}</sup> ${esc(flatten(v.content))}</p>`).join('')}</div>
+     ${verses.length<passage.last-passage.first+1?'<p class="muted">Some verse numbers differ in this translation.</p>':''}
+     <p class="attribution">${esc(t.shortName||t.name||translation)} · <a href="${safeURL(t.licenseUrl||t.website)}" target="_blank" rel="noopener noreferrer">Source &amp; license</a>${t.licenseNotice?'<br>'+esc(flatten(t.licenseNotice)):''}</p>`;
+    if(!reported.has(chapterKey)){reported.add(chapterKey);reportBibleView(data);}
+   }catch(error){
+    if(!current())return;
+    text.innerHTML=error.status===404?'<p class="muted">This passage is unavailable in the current translation.</p>':'<p class="muted">Verse text could not load.</p><button type="button">Retry verse text</button>';
+    const retry=text.querySelector('button');
+    if(retry)retry.onclick=load;
+   }
+  }
+  load();
+ });
+}
+
 let notebookView='notes';
 function notebook(){
  modal('My notebook',`<div class="notebook-views" role="group" aria-label="Notebook view">
@@ -297,6 +442,8 @@ function notebook(){
  <input id="noteSearch" class="full-input" type="search"><div id="noteList"></div>`);
  const search=$('noteSearch'),list=$('noteList');
  const controls=$('modalBody').querySelectorAll('[data-notebook-view]');
+ let highlightPage=0,displayedQuery='',searchTimer;
+ const pageSize=8;
  function render(){
   const viewingHighlights=notebookView==='highlights';
   const label=viewingHighlights?'Search highlights':'Search notes';
@@ -304,28 +451,33 @@ function notebook(){
   search.setAttribute('aria-label',label);
   controls.forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.notebookView===notebookView)));
   const q=search.value.trim().toLowerCase();
+  displayedQuery=search.value;
   if(viewingHighlights){
    const names=new Map(Object.values(state.notes).map(note=>[note.book,note.bookName]));
    const passages=highlightedPassages(state.highlights).map(passage=>{
     const name=state.books.find(book=>book.id===passage.book)?.name||names.get(passage.book)||passage.book;
     const range=passage.first===passage.last?String(passage.first):`${passage.first}–${passage.last}`;
-    return {...passage,label:`${name} ${passage.chapter}:${range}`};
+    return {...passage,name,label:`${name} ${passage.chapter}:${range}`};
    }).filter(passage=>`${passage.label} ${passage.book}`.toLowerCase().includes(q.replace(/-/g,'–')));
-   list.innerHTML=passages.map((passage,index)=>`<article class="notebook-entry"><button type="button" data-highlight-passage="${index}">${esc(passage.label)} ↗</button></article>`).join('')
-    ||`<p class="muted">${q?'No matching highlights.':'No highlights yet.'}</p>`;
-   list.querySelectorAll('[data-highlight-passage]').forEach(button=>button.onclick=async()=>{
-    const passage=passages[Number(button.dataset.highlightPassage)];
-    const book=state.books.find(book=>book.id===passage.book);
-    if(!book||passage.chapter>book.numberOfChapters){
-     toast('This passage is unavailable in your current translation.');
-     return;
-    }
-    $('modal').close();
-    await navigate(passage.book,passage.chapter,passage.first);
-    if(state.data&&state.book===passage.book&&state.chapter===passage.chapter){
-     document.querySelector(`[data-verse="${state.verse}"]`)?.scrollIntoView({block:'center'});
-    }
-   });
+   if(!passages.length){
+    list.innerHTML=`<p class="muted">${q?'No matching highlights.':'No highlights yet.'}</p>`;
+    return;
+   }
+   const start=highlightPage*pageSize;
+   renderHighlightCards(list,passages.slice(start,start+pageSize));
+   if(passages.length>pageSize){
+    list.insertAdjacentHTML('beforeend',`<div class="button-row">
+     <button type="button" data-highlight-page="-1"${start===0?' disabled':''}>Previous</button>
+     <span>Page ${highlightPage+1} of ${Math.ceil(passages.length/pageSize)}</span>
+     <button type="button" data-highlight-page="1"${start+pageSize>=passages.length?' disabled':''}>Next</button>
+    </div>`);
+    list.querySelectorAll('[data-highlight-page]').forEach(button=>button.onclick=()=>{
+     if(hasHighlightDraft(list)&&!confirm('Leave this page and discard unsaved notes?'))return;
+     highlightPage+=Number(button.dataset.highlightPage);
+     render();
+     search.focus();
+    });
+   }
    return;
   }
   const entries=Object.entries(state.notes).sort((a,b)=>(b[1].updatedAt||'').localeCompare(a[1].updatedAt||''));
@@ -341,13 +493,33 @@ function notebook(){
   });
  }
  controls.forEach(button=>button.onclick=()=>{
+  if(notebookView===button.dataset.notebookView)return;
+  if(hasHighlightDraft(list)&&!confirm('Change views and discard unsaved notes?'))return;
+  clearTimeout(searchTimer);
   notebookView=button.dataset.notebookView;
   search.value='';
+  highlightPage=0;
   render();
  });
- search.oninput=render;
+ search.oninput=()=>{
+  clearTimeout(searchTimer);
+  if(hasHighlightDraft(list)){
+   search.value=displayedQuery;
+   toast('Save or cancel your note before searching.');
+   return;
+  }
+  highlightPage=0;
+  if(notebookView==='highlights'){
+   searchTimer=setTimeout(()=>{if(list.isConnected&&$('modal').open&&!hasHighlightDraft(list))render();},200);
+  }else render();
+ };
  render();
  $('exportNotes').onclick=exportNotes;$('importNotes').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{if(account&&!account.canEdit())throw Error('Load your account before importing.');const file=e.target.files[0];if(!file)return;if(file.size>5_000_000)throw Error('Please choose a backup smaller than 5 MB.');const d=JSON.parse(await file.text());if(d.format!=='exegetical-backup'||d.version!==1||!d.notes||typeof d.notes!=='object'||Array.isArray(d.notes))throw Error('This is not a valid Exegetical backup.');const imported={};for(const [k,n]of Object.entries(d.notes)){if(!/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}$/.test(k)||!n||typeof n.text!=='string'||n.text.length>200000||typeof n.bookName!=='string'||!Number.isInteger(n.chapter)||!Number.isInteger(n.verse)||`${n.book}.${n.chapter}.${n.verse}`!==k||typeof n.updatedAt!=='string'||!Number.isFinite(Date.parse(n.updatedAt)))throw Error('The backup contains invalid notes.');imported[k]=n;}let conflicts=Object.keys(imported).filter(k=>state.notes[k]&&state.notes[k].text!==imported[k].text);if(conflicts.length&&!confirm(`This backup replaces ${conflicts.length} existing note(s). Continue?`))return;state.notes={...state.notes,...imported};if(d.highlights&&typeof d.highlights==='object')for(const [k,v]of Object.entries(d.highlights))if(/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}$/.test(k)&&v===true)state.highlights[k]=true;save('exegetical-notes',state.notes);save('exegetical-highlights',state.highlights);noteCount();renderChapter();renderStudy();notebook();toast('Backup imported.');}catch(error){toast(error.message||'Could not import this backup.');}};}
+document.addEventListener('study-auth-changed',()=>{
+ if(!$('noteList'))return;
+ if($('modal').open)$('modal').close();
+ $('modalBody').replaceChildren();
+});
 $('notebookNav').onclick=notebook;$('readNav').onclick=()=>{document.body.classList.remove('focus');$('reader').scrollIntoView({behavior:'smooth'});};
 $('sources').onclick=()=>modal('Rooted in good sources',`<div class="modal-copy"><p><b>Bible translations and commentaries</b><br>Provided by the <a href="https://bible.helloao.org" target="_blank" rel="noopener noreferrer">Free Use Bible API, AO Lab</a>. Each translation and commentary retains its own source and license, linked within the reader. Availability and versification vary.</p><p><b>API.Bible translations</b><br>Additional editions are supplied through <a href="https://api.bible/" target="_blank" rel="noopener noreferrer">API.Bible</a> according to this site’s licensed access. Copyright notices accompany the text. Its required FUMS service reports Scripture views using anonymous device/session identifiers. See the <a href="/privacy/">privacy notice</a>.</p><p><b>Original languages</b><br>The Berean Bible interlinear is public domain. Brief Hebrew and Greek lexicons are from <a href="https://github.com/STEPBible/STEPBible-Data" target="_blank" rel="noopener noreferrer">STEPBible.org / Tyndale House, Cambridge</a>, under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>, adapted into the API format by AO Lab.</p><p>A dictionary gives a word’s range of meaning. Context determines how it is used in a particular passage. Historical commentaries reflect their authors’ perspectives.</p><p><b>ESV copyright</b><br>Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. The ESV text may not be quoted in any publication made available to the public by a Creative Commons license. The ESV may not be translated into any other language. Users may not copy or download more than 500 verses of the ESV Bible or more than one half of any book of the ESV Bible. <a href="https://www.esv.org/" target="_blank" rel="noopener noreferrer">ESV.org</a></p><p><b>Your notes</b><br>Sign in to save private notes, highlights, reading position, translation, and appearance to your account using Supabase. Database rules restrict records to their owner. Guest notes stay in this browser until you choose to copy them into an account. Account notes are cached separately by user on this device; sign out on shared devices. Export a backup at any time.</p><p><a href="https://github.com/robekenn/Exegetical-Bible" target="_blank" rel="noopener noreferrer">View the project on GitHub ↗</a></p></div>`);
 async function init(){noteCount();try{const [translations,commentaries,features,apiBibles]=await Promise.all([api('available_translations.json'),api('available_commentaries.json'),fetch('/api/config').then(r=>r.json()),api('available_api_bible.json').catch(e=>{apiBibleError=e.message;return {translations:[]};})]);translations.translations=[...translations.translations,...apiBibles.translations];if(features.esvEnabled)translations.translations.unshift({id:'ESV',name:'English Standard Version',englishName:'English Standard Version',shortName:'ESV',language:'eng',languageEnglishName:'English'});state.translations=translations.translations.sort((a,b)=>(a.language==='eng'?0:1)-(b.language==='eng'?0:1)||(a.englishName||a.name).localeCompare(b.englishName||b.name));state.commentaries=commentaries.commentaries;if(!state.translations.some(t=>t.id===state.translation))state.translation='BSB';await getBooks();await loadChapter();}catch(e){showError($('chapterText'),e,init);}}
