@@ -22,12 +22,26 @@ function reportBibleView(data){
 const favoriteKey='exegetical-favorite-translations';
 const savedFavorites=stored(favoriteKey,[]);
 const favorites=new Set(Array.isArray(savedFavorites)?savedFavorites.filter(id=>typeof id==='string'):[]);
+function refreshFavoriteControls(){
+ for(const id of ['compareSelect','translationList']){
+  $(id)?.dispatchEvent(new Event('favorites-changed'));
+ }
+}
+function setFavorites(ids){
+ favorites.clear();
+ ids.forEach(id=>favorites.add(id));
+ refreshFavoriteControls();
+}
 function toggleFavorite(id){
- const wasFavorite=favorites.has(id);
- if(wasFavorite)favorites.delete(id);
- else favorites.add(id);
+ const selected=!favorites.has(id);
+ if(account?.isUser()){
+  return account.changeFavorite(id,selected);
+ }
+ if(selected)favorites.add(id);
+ else favorites.delete(id);
  try{localStorage.setItem(favoriteKey,JSON.stringify([...favorites]));}
  catch{toast('Favorites could not be saved on this device.');}
+ return true;
 }
 function matchesTranslation(t,query){
  return [t.id,t.shortName,t.name,t.englishName,t.language,t.languageEnglishName]
@@ -105,7 +119,7 @@ else if(state.tab==='compare'){
  list();
  $('translationSearch').oninput=list;
  $('compareSelect').addEventListener('favorites-changed',list);
- $('compareFavorite').onclick=()=>{toggleFavorite(state.compare);list();};
+ $('compareFavorite').onclick=()=>{if(toggleFavorite(state.compare))list();};
  const index=verses().findIndex(v=>v.number===state.verse);$('comparePrevious').disabled=index<=0;$('compareNext').disabled=index>=verses().length-1;
  for(const [button,step]of [['comparePrevious',-1],['compareNext',1]])$(button).onclick=()=>{state.verse=verses()[index+step].number;renderChapter();position();renderStudy();};
  let request=0;async function compare(){const token=++request;$('comparison').innerHTML='<p class="loading">Opening translation…</p>';try{const d=await api(`${state.compare}/${state.book}/${state.chapter}.json`);if(id!==studyId||token!==request)return;const v=d.chapter.content.find(v=>v.type==='verse'&&v.number===state.verse);$('comparison').innerHTML=card(d.translation.name,v?flatten(v.content):'This verse is not available in this translation.',d.translation.textDirection)+`<p class="attribution"><a href="${safeURL(d.translation.licenseUrl||d.translation.website)}" target="_blank" rel="noopener noreferrer">Translation source & license ↗</a>${d.translation.licenseNotice?'<br>'+esc(d.translation.licenseNotice):''}</p>`;if(v)reportBibleView(d);}catch(e){if(id===studyId&&token===request)showError($('comparison'),e,compare);}}
@@ -142,7 +156,7 @@ $('translationButton').onclick=()=>{
    +(!matches.length?'<p class="muted">No matching translations.</p>':'');
   root.querySelectorAll('[data-favorite]').forEach(button=>button.onclick=()=>{
    const id=button.dataset.favorite;
-   toggleFavorite(id);
+   if(!toggleFavorite(id))return;
    render();
    const replacement=[...root.querySelectorAll('[data-favorite]')].find(item=>item.dataset.favorite===id);
    (replacement||$('pickerTranslationSearch')).focus({preventScroll:true});
@@ -165,6 +179,7 @@ $('translationButton').onclick=()=>{
   };
  }
  const reset=()=>{limit=100;render();};
+ root.addEventListener('favorites-changed',render);
  $('pickerTranslationSearch').oninput=reset;
  $('translationLanguage').onchange=reset;
  render();
@@ -266,6 +281,7 @@ async function start(){
  await init();
  account=await createAccount({state,esc,modal,toast,refresh:(options={})=>{noteCount();if(options.background){document.querySelectorAll('[data-verse]').forEach(el=>{const k=state.book+'.'+state.chapter+'.'+el.dataset.verse;el.classList.toggle('highlighted',Boolean(state.highlights[k]));let dot=el.querySelector('.note-dot');if(state.notes[k]?.text&&!dot){dot=document.createElement('span');dot.className='note-dot';dot.textContent='✎';dot.setAttribute('aria-label','Has note');el.append(dot);}else if(!state.notes[k]?.text&&dot)dot.remove();});const editor=$('noteText');if(editor&&document.activeElement!==editor)editor.value=state.notes[key()]?.text||'';return;}renderChapter();renderStudy();},
  localRead:stored,localWrite:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}},
+ applyFavorites:setFavorites,
  getPreferences:()=>({streak:streak.snapshot(),book:state.book,chapter:state.chapter,translation:state.translation,dark:document.body.classList.contains('dark'),size:Number(getComputedStyle(document.documentElement).getPropertyValue('--reading-size').replace('px',''))||20}),
  applyPreferences:async p=>{streak.merge(p.streak||{});if(typeof p.dark==='boolean')document.body.classList.toggle('dark',p.dark);if(p.size>=16&&p.size<=30)document.documentElement.style.setProperty('--reading-size',p.size+'px');if(state.translations.some(t=>t.id===p.translation)){state.translation=p.translation;await getBooks();if(state.books.some(b=>b.id===p.book)){state.book=p.book;state.chapter=Math.max(1,Math.min(Number(p.chapter)||1,book().numberOfChapters));}selectors();await loadChapter();}}
  });
