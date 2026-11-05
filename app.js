@@ -200,6 +200,7 @@ function setupDesktopPanels(){
 
 function applyReaderTheme(dark){
  document.body.classList.toggle('dark',dark);
+ document.querySelector('meta[name="theme-color"]')?.setAttribute('content',dark?'#1d2924':'#284e43');
  try{localStorage.setItem('exegetical-display-dark',JSON.stringify(dark));}catch{}
 }
 $('theme').onclick=()=>{
@@ -207,7 +208,9 @@ $('theme').onclick=()=>{
  applyReaderTheme(dark);
  save('exegetical-dark',dark);
 };
-if(stored('exegetical-dark',false))document.body.classList.add('dark');
+document.addEventListener('study-auth-changed',event=>{
+ if(!event.detail.id)applyReaderTheme(stored('exegetical-dark',false)===true);
+});
 document.documentElement.style.setProperty('--reading-size',stored('exegetical-size',20)+'px');
 $('settings').onclick=()=>{modal('Make yourself at home',`<p class="muted">Set a comfortable reading size.</p><label class="label" for="fontSize">Scripture text size</label><input id="fontSize" type="range" min="16" max="30" value="${stored('exegetical-size',20)}"><div class="button-row"><button id="themeSetting">Switch light / dark</button><button id="sharePassage">Copy passage link</button><a href="/feedback/">Feedback or bug report</a></div>`);$('fontSize').oninput=e=>{document.documentElement.style.setProperty('--reading-size',e.target.value+'px');save('exegetical-size',Number(e.target.value));};$('themeSetting').onclick=()=>$('theme').click();$('sharePassage').onclick=async()=>{try{await navigator.clipboard.writeText(location.href);toast('Passage link copied.');}catch{toast('Copy the link from your address bar.');}};};
 function chooseTranslation(mode='reader',onCompare){
