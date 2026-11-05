@@ -57,7 +57,7 @@ ESV requests pass only a validated book/chapter to Crossway. ESV responses use `
 ## Profiles, friends and messages
 Profiles contain a unique username, display name, optional bio, general location, interests and a 256px WebP picture. Exact-username discovery is opt-in; there is no public directory. Accepted friends see profile details. Private notes remain owner-only. Profile photos are resized in the browser and the original metadata/file is not uploaded.
 
-Apply `db/social.sql`, then `db/social-hardening.sql` and `db/social-visibility.sql` as explicit, transaction-wrapped migrations. They create owner/participant RLS, accepted-friend-only message RPCs, exact-handle lookup, recipient-only request acceptance, blocks, reports and rate limits. No production test users or messages are created by builds or migrations. Reports include a snapshot of reported-message evidence and are available to the reporter and authorized operators through the database. An operator should review the `community_reports` table routinely; there is no automated email delivery or moderation dashboard yet.
+Apply `db/social.sql`, then `db/social-hardening.sql` and `db/social-visibility.sql` as explicit, transaction-wrapped migrations. They create owner/participant RLS, accepted-friend-only message RPCs, exact-handle lookup, recipient-only request acceptance, blocks, reports and rate limits. No production test users or messages are created by builds or migrations. Reports include a snapshot of reported-message evidence and are available to the reporter and authorized operators through the database. An operator should review the `community_reports` table routinely; administrators can review them through the admin portal.
 
 Messages are plaintext in the database, not end-to-end encrypted. Conversation view shows the latest 100 messages; the account export retrieves the complete accessible history. Message removal is a tombstone; unfriending preserves conversation history, blocking prevents new contact, and deleting an account cascades to its app records and messages for both participants. Reports retain text/evidence with account links removed. Only user-initiated controls send requests or messages.
 
@@ -129,3 +129,21 @@ Set the server-only sensitive Vercel environment variable `API_BIBLE_KEY` for Pr
 The site imports every text Bible returned by the account's `/v1/bibles` catalog, including licensed versions such as NIV only when the account has access. It does not purchase subscriptions or add licenses. The translation picker searches names, abbreviations and languages, with a language filter. API.Bible entries carry a provider label and stable AB_ IDs so they coexist with AO editions. Book coverage comes from each edition's chapter metadata; unsupported passages remain explicit errors.
 
 The restricted same-origin proxy validates IDs against the account catalog, keeps the key server-only, sanitizes provider HTML into plain verse/heading records, and returns private/no-store responses. Only metadata is cached briefly on the server; scripture bypasses the browser accumulation cache and is excluded from exports. Reader and compare display provider copyright notices. When API.Bible Scripture is displayed, its required FUMS tracker reports a view token and anonymous device/session identifiers; no account identity or private study content is passed. Privacy/storage notices document this. Missing credentials/provider errors leave existing AO and ESV reading available. No provider Scripture text is committed in fixtures.
+
+
+## Feedback, user moderation, and appeals
+
+Apply [db/moderation.sql](db/moderation.sql) once in the production Supabase SQL Editor after the existing `db/admin.sql` migration. The migration is transactional and safe to rerun. It adds private moderation tables and installs a database trigger that blocks an active banned email on account creation and email changes, including provider signups. It does not change existing account roles or delete users on installation.
+
+Open `/feedback/` to submit feedback or a bug without signing in. Signed-in submissions are associated with the verified account. User reports and appeals appear alongside feedback in the admin Inbox. Guest submissions use a hashed network identifier for daily rate limiting.
+
+The IDs in `ADMIN_USER_IDS` become protected owners. Only owners can grant or remove the admin role, and an admin must be demoted before an account can be banned. The Users view searches email, username, name, or user ID. Every ban, lift, and role change records the verified actor in the Audit log.
+
+For ban notices, add these server-only Production variables to Vercel and redeploy:
+
+- `MODERATION_SMTP_USER` with the Gmail sender address, for example `exegeticalbible@gmail.com`.
+- `MODERATION_SMTP_PASSWORD` with a separate Google app password for the sender. Set it as Sensitive. Never use the normal Google password, paste the app password into chat, or commit it. [Google app password setup](https://support.google.com/accounts/answer/185833).
+
+Bans require email configuration and typed confirmation. The account deletion and normalized email block commit together. The notice is sent afterward. If delivery fails, the Bans view records the failure and offers a retry. The notice includes a private link for one appeal per ban. Review appeals in Inbox and use **View ban** to lift the email block when appropriate. Lifting a block permits a new account. It cannot restore deleted data.
+
+Before relying on this workflow, verify Gmail delivery and signup enforcement with a disposable account you control. Never use a real member account as a test fixture.
