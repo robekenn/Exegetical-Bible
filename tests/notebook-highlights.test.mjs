@@ -20,7 +20,7 @@ test('notebook groups consecutive saved highlights and opens the first verse', a
    state.highlights={'JHN.3.18':true,'JHN.3.16':true,'JHN.3.17':true,'JHN.3.19':false,'JHN.3.20':true,'JHN.4.1':true};
    state.notes={'JHN.3.16':{book:'JHN',bookName:'John',chapter:3,verse:16,text:'Personal note',updatedAt:'2026-11-04'}};
    api=async path=>({
-    chapter:{content:Array.from({length:21},(_,i)=>({type:'verse',number:i+1,content:['Synthetic verse '+(i+1)]}))},
+    chapter:{content:Array.from({length:21},(_,i)=>({type:'verse',number:i+1,content:['Synthetic verse '+(i+1)+'—\\n\\ncontinued']}))},
     translation:{shortName:'BSB',licenseUrl:'https://example.test/'}
    });
    let opened;
@@ -35,6 +35,7 @@ test('notebook groups consecutive saved highlights and opens the first verse', a
   const card=document.querySelector('[data-highlight-card]');
   const text=card.querySelector('[data-highlight-text]').textContent;
   for(const verse of [16,17,18])assert.match(text,new RegExp('Synthetic verse '+verse));
+  assert.match(text,/Synthetic verse 16— continued/);
   assert.match(card.querySelector('[data-highlight-notes]').textContent,/Personal note/);
   card.querySelector('[data-add-highlight-note]').click();
   const editor=card.querySelector('form');

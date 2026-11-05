@@ -2,15 +2,20 @@ import {test} from 'node:test';import assert from 'node:assert/strict';import {J
 test('notes prompts save drafts and compare uses the shared picker with favorites managed in the reader',async()=>{
  const html=await readFile(new URL('../index.html',import.meta.url),'utf8'),dom=new JSDOM(html,{url:'https://example.test/',runScripts:'outside-only'}),context=dom.getInternalVMContext();
  let code=await readFile(new URL('../app.js',import.meta.url),'utf8');code=code.replace(/^import .*;\n/gm,'');code=code.slice(0,code.lastIndexOf('start().catch'));vm.runInContext(code,context);
- vm.runInContext(`state.book='JHN';state.chapter=1;state.verse=1;state.books=[{id:'JHN',name:'John',numberOfChapters:1}];state.translations=[{id:'BSB',name:'Berean',language:'eng'},{id:'KJV',name:'King James',language:'eng'}];state.translation='BSB';state.compare='KJV';state.data={translation:{name:'Berean'},chapter:{content:[{type:'verse',number:1,content:['First verse']},{type:'verse',number:2,content:['Second verse']}]}};state.tab='notes';renderStudy();`,context);
+ vm.runInContext(`state.book='JHN';state.chapter=1;state.verse=1;state.books=[{id:'JHN',name:'John',numberOfChapters:1}];state.translations=[{id:'BSB',name:'Berean',language:'eng'},{id:'KJV',name:'King James',language:'eng'}];state.translation='BSB';state.compare='KJV';state.data={translation:{name:'Berean',licenseNotice:'Primary notice'},chapter:{content:[{type:'verse',number:1,content:['First verse']},{type:'verse',number:2,content:['Second verse']}]}};state.tab='notes';renderStudy();`,context);
  const d=dom.window.document;d.querySelector('[data-note-prompt="Observation"]').click();assert.equal(d.getElementById('noteText').value,'Observation:\n');assert.match(dom.window.localStorage.getItem('exegetical-notes'),/Observation/);
- vm.runInContext(`api=async()=>({translation:{name:'King James',licenseUrl:'https://example.test/license'},chapter:{content:[{type:'verse',number:1,content:['Compared verse']}]}});state.tab='compare';`,context);await vm.runInContext('renderStudy()',context);
+ vm.runInContext(`api=async()=>({translation:{name:'King James',licenseUrl:'https://example.test/license',licenseNotice:'Comparison notice'},chapter:{content:[{type:'verse',number:1,content:['Compared—\\n\\n\\nverse']}]}});state.tab='compare';`,context);await vm.runInContext('renderStudy()',context);
  const dialog=d.getElementById('modal');
  dialog.showModal=()=>{dialog.open=true;};
  dialog.close=()=>{dialog.open=false;};
  vm.runInContext("favorites.add('KJV')",context);
  assert.equal(d.querySelectorAll('.translation-compare-card').length,2);
- assert.match(d.getElementById('comparison').textContent,/Compared verse/);
+ assert.match(d.getElementById('comparison').textContent,/Compared— verse/);
+ const pair=d.querySelector('.comparison-pair'),credits=d.querySelector('.comparison-credits');
+ assert.equal(pair.nextElementSibling,credits);
+ assert.equal(pair.querySelector('.attribution'),null);
+ assert.match(credits.textContent,/Primary notice/);
+ assert.match(credits.textContent,/Comparison notice/);
  assert.equal(d.getElementById('compareFavorite'),null);
  d.getElementById('compareTranslationButton').click();
  assert.ok(d.getElementById('pickerTranslationSearch'));
