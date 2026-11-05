@@ -150,12 +150,6 @@ $('bookSelect').onchange=e=>navigate(e.target.value,1);
 $('chapterSelect').onchange=e=>navigate(state.book,Number(e.target.value));
 function move(dir){const b=book();if(!b)return;const c=state.chapter+dir;if(c>=1&&c<=b.numberOfChapters)navigate(state.book,c);else{const next=state.books[state.books.indexOf(b)+dir];if(next)navigate(next.id,dir>0?1:next.numberOfChapters);}window.scrollTo({top:0,behavior:'smooth'});}
 $('previous').onclick=()=>move(-1);$('next').onclick=()=>move(1);
-function setReaderFocus(enabled){
- document.body.classList.toggle('focus',enabled);
- $('focus').setAttribute('aria-pressed',String(enabled));
-}
-$('focus').onclick=()=>setReaderFocus(!document.body.classList.contains('focus'));
-
 function setupDesktopPanels(){
  const workspace=document.querySelector('.workspace');
  const wide=matchMedia('(min-width: 901px)');
@@ -164,35 +158,35 @@ function setupDesktopPanels(){
  const saved=stored(key,{});
  const choices={books:saved.books,study:saved.study};
  const isOpen=panel=>typeof choices[panel]==='boolean'?choices[panel]:panel==='study'||wide.matches;
+ const closeBoth=$('closeSidePanels');
  const controls={
   books:$('toggleBooksPanel'),
   study:$('toggleStudyPanel')
  };
  function render(){
-  const focused=document.body.classList.contains('focus');
   for(const [panel,toggle] of Object.entries(controls)){
-   const open=isOpen(panel);
-   workspace.dataset[panel]=open?'open':'closed';
-   const expanded=open&&!focused;
+   const expanded=isOpen(panel);
+   workspace.dataset[panel]=expanded?'open':'closed';
    $(toggle.getAttribute('aria-controls')).inert=desktop.matches&&!expanded;
    const label=(expanded?'Close ':'Open ')+(panel==='books'?'Books':'Study');
    toggle.setAttribute('aria-expanded',String(expanded));
    toggle.setAttribute('aria-label',label);
    toggle.title=label;
   }
+  closeBoth.setAttribute('aria-disabled',String(!isOpen('books')&&!isOpen('study')));
  }
- function change(panel,open){
+ function change(next){
   workspace.dataset.panelMotion='';
-  choices[panel]=open;
+  Object.assign(choices,next);
   try{localStorage.setItem(key,JSON.stringify(choices));}catch{}
-  if(open)setReaderFocus(false);
   render();
  }
  for(const [panel,toggle] of Object.entries(controls)){
-  toggle.onclick=()=>change(panel,document.body.classList.contains('focus')||!isOpen(panel));
+  toggle.onclick=()=>change({[panel]:!isOpen(panel)});
  }
- $('focus').addEventListener('click',render);
- $('readNav').addEventListener('click',render);
+ closeBoth.onclick=()=>{
+  if(isOpen('books')||isOpen('study'))change({books:false,study:false});
+ };
  wide.addEventListener('change',render);
  desktop.addEventListener('change',render);
  render();
@@ -607,7 +601,7 @@ document.addEventListener('study-auth-changed',()=>{
  if($('modal').open)$('modal').close();
  $('modalBody').replaceChildren();
 });
-$('notebookNav').onclick=notebook;$('readNav').onclick=()=>{setReaderFocus(false);$('reader').scrollIntoView({behavior:'smooth'});};
+$('notebookNav').onclick=notebook;$('readNav').onclick=()=>{$('reader').scrollIntoView({behavior:'smooth'});};
 $('sources').onclick=()=>modal('Rooted in good sources',`<div class="modal-copy"><p><b>Bible translations and commentaries</b><br>Provided by the <a href="https://bible.helloao.org" target="_blank" rel="noopener noreferrer">Free Use Bible API, AO Lab</a>. Each translation and commentary retains its own source and license, linked within the reader. Availability and versification vary.</p><p><b>API.Bible translations</b><br>Additional editions are supplied through <a href="https://api.bible/" target="_blank" rel="noopener noreferrer">API.Bible</a> according to this site’s licensed access. Copyright notices accompany the text. Its required FUMS service reports Scripture views using anonymous device/session identifiers. See the <a href="/privacy/">privacy notice</a>.</p><p><b>Original languages</b><br>The Berean Bible interlinear is public domain. Brief Hebrew and Greek lexicons are from <a href="https://github.com/STEPBible/STEPBible-Data" target="_blank" rel="noopener noreferrer">STEPBible.org / Tyndale House, Cambridge</a>, under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>, adapted into the API format by AO Lab.</p><p>A dictionary gives a word’s range of meaning. Context determines how it is used in a particular passage. Historical commentaries reflect their authors’ perspectives.</p><p><b>ESV copyright</b><br>Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. The ESV text may not be quoted in any publication made available to the public by a Creative Commons license. The ESV may not be translated into any other language. Users may not copy or download more than 500 verses of the ESV Bible or more than one half of any book of the ESV Bible. <a href="https://www.esv.org/" target="_blank" rel="noopener noreferrer">ESV.org</a></p><p><b>Your notes</b><br>Sign in to save private notes, highlights, reading position, translation, and appearance to your account using Supabase. Database rules restrict records to their owner. Guest notes stay in this browser until you choose to copy them into an account. Account notes are cached separately by user on this device; sign out on shared devices. Export a backup at any time.</p><p><a href="https://github.com/robekenn/Exegetical-Bible" target="_blank" rel="noopener noreferrer">View the project on GitHub ↗</a></p></div>`);
 async function init(){noteCount();try{const [translations,commentaries,features,apiBibles]=await Promise.all([api('available_translations.json'),api('available_commentaries.json'),fetch('/api/config').then(r=>r.json()),api('available_api_bible.json').catch(e=>{apiBibleError=e.message;return {translations:[]};})]);translations.translations=[...translations.translations,...apiBibles.translations];if(features.esvEnabled)translations.translations.unshift({id:'ESV',name:'English Standard Version',englishName:'English Standard Version',shortName:'ESV',language:'eng',languageEnglishName:'English'});state.translations=translations.translations.sort((a,b)=>(a.language==='eng'?0:1)-(b.language==='eng'?0:1)||(a.englishName||a.name).localeCompare(b.englishName||b.name));state.commentaries=commentaries.commentaries;if(!state.translations.some(t=>t.id===state.translation))state.translation='BSB';await getBooks();await loadChapter();}catch(e){showError($('chapterText'),e,init);}}
 let bookNavigation;
