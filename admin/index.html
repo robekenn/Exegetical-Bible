@@ -1,1 +1,50 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Report review — Exegetical</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/admin/admin.css"></head><body><main class="admin-shell"><header><a href="/">← Back to Bible</a><p class="eyebrow">EXEGETICAL · ADMIN</p><h1>Care for the community.</h1><p class="muted">Review reports and requests. Record your decision and keep a clear history.</p></header><p id="adminStatus" role="status">Checking your account…</p><section id="adminContent" hidden><div class="admin-toolbar"><label>Show <select id="statusFilter"><option value="open">Open</option><option value="reviewing">In review</option><option value="resolved">Resolved</option><option value="dismissed">Dismissed</option><option value="all">All reports</option></select></label><button id="refreshReports">Refresh</button></div><div class="admin-grid"><section aria-label="Report inbox"><div id="reportList"></div><div class="button-row"><button id="previousReports">Previous</button><span id="pageLabel"></span><button id="nextReports">Next</button></div></section><section id="reportDetail" aria-label="Selected report"><p class="muted">Choose a report to review its details.</p></section></div></section></main><script type="module" src="/admin/admin.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+ <meta charset="utf-8">
+ <meta name="viewport" content="width=device-width,initial-scale=1">
+ <title>Admin portal · Exegetical</title>
+ <link rel="stylesheet" href="/style.css">
+ <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+<main class="admin-shell">
+ <header><a href="/">← Back to Bible</a><h1>Admin portal</h1></header>
+ <p id="adminStatus" role="status">Checking your account…</p>
+ <section id="adminContent" hidden>
+  <nav class="admin-tabs" aria-label="Admin views">
+   <button type="button" data-admin-view="reports" aria-pressed="true">Inbox</button>
+   <button type="button" data-admin-view="users" aria-pressed="false">Users</button>
+   <button type="button" data-admin-view="bans" aria-pressed="false">Bans</button>
+   <button type="button" data-admin-view="audit" aria-pressed="false">Audit log</button>
+  </nav>
+  <div id="inboxFilters" class="admin-toolbar">
+   <label>Type <select id="categoryFilter">
+    <option value="all">All submissions</option><option value="abuse">User reports</option>
+    <option value="bug">Bug reports</option><option value="feedback">Feedback</option>
+    <option value="appeal">Ban appeals</option><option value="privacy">Privacy</option>
+    <option value="support">Support</option><option value="accessibility">Accessibility</option>
+   </select></label>
+   <label>Status <select id="statusFilter">
+    <option value="open">Open</option><option value="reviewing">In review</option>
+    <option value="resolved">Resolved</option><option value="dismissed">Dismissed</option><option value="all">All</option>
+   </select></label>
+  </div>
+  <form id="userFilter" class="admin-toolbar" hidden>
+   <label for="userSearch">Find a user</label>
+   <input id="userSearch" type="search" maxlength="120" placeholder="Email, username, name, or ID">
+   <button type="submit">Search</button>
+  </form>
+  <div class="admin-toolbar"><button id="refreshReports" type="button">Refresh</button><button id="clearBanFilter" type="button" hidden>Show all bans</button></div>
+  <div class="admin-grid">
+   <section aria-label="Results">
+    <div id="reportList"></div>
+    <div class="button-row"><button id="previousReports">Previous</button><span id="pageLabel"></span><button id="nextReports">Next</button></div>
+   </section>
+   <section id="reportDetail" aria-label="Details"></section>
+  </div>
+ </section>
+</main>
+<script type="module" src="/admin/admin.js"></script>
+</body>
+</html>
