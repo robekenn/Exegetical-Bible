@@ -14,7 +14,7 @@ for(const appeal of [false,true]){
  <link rel="stylesheet" href="/style.css">
  <link rel="stylesheet" href="/admin/admin.css">
 </head>
-<body>
+<body><script src="/theme.js" data-sync-account></script>
  <main class="admin-shell feedback-page">
   <a href="/">← Back to Bible</a>
   <h1>${title}</h1>
