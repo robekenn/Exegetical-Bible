@@ -24,10 +24,20 @@ test('API.Bible catalog and restricted chapter route preserve attribution, repor
  }finally{global.fetch=originalFetch;if(originalKey===undefined)delete process.env.API_BIBLE_KEY;else process.env.API_BIBLE_KEY=originalKey;}
 });
 test('translation picker searches provider abbreviations, filters languages and escapes titles; view reports only displayed content',async()=>{
- const dom=new JSDOM(await readFile(new URL('../index.html',import.meta.url),'utf8'),{url:'https://example.test/',runScripts:'outside-only'});const context=dom.getInternalVMContext(),d=dom.window.document;d.getElementById('modal').showModal=()=>{};
+ const dom=new JSDOM(await readFile(new URL('../index.html',import.meta.url),'utf8'),{url:'https://example.test/',runScripts:'outside-only'});const context=dom.getInternalVMContext(),d=dom.window.document;d.getElementById('modal').showModal=function(){this.open=true;};
  let code=await readFile(new URL('../app.js',import.meta.url),'utf8');code=code.replace(/^import .*;\n/gm,'');code=code.slice(0,code.lastIndexOf('start().catch'));vm.runInContext(code,context);
  vm.runInContext(`state.translations=[{id:'AB_${id}',shortName:'FIX',name:'<img src=x>',englishName:'Fixture Bible',language:'eng',languageEnglishName:'English',provider:'API.Bible'},{id:'OTHER',name:'Other Bible',language:'spa',languageEnglishName:'Spanish'}];`,context);
- d.getElementById('translationButton').click();assert.equal(d.querySelectorAll('.translation-option').length,2);const search=d.getElementById('translationSearch');search.value='FIX';search.dispatchEvent(new dom.window.Event('input'));assert.equal(d.querySelectorAll('.translation-option').length,1);assert.equal(d.querySelector('#translationList img'),null);
+ d.getElementById('translationButton').click();assert.equal(d.querySelectorAll('.translation-option').length,2);const search=d.getElementById('pickerTranslationSearch');search.value='FIX';search.dispatchEvent(new dom.window.Event('input'));assert.equal(d.querySelectorAll('.translation-option').length,1);assert.equal(d.querySelector('#translationList img'),null);
  search.value='';search.dispatchEvent(new dom.window.Event('input'));const language=d.getElementById('translationLanguage');language.value='spa';language.dispatchEvent(new dom.window.Event('change'));assert.equal(d.querySelectorAll('.translation-option').length,1);assert.match(d.getElementById('translationList').textContent,/Other Bible/);
+ language.value='';language.dispatchEvent(new dom.window.Event('change'));
+ const favorite=()=>d.querySelector('[data-favorite="AB_'+id+'"]');
+ favorite().click();
+ assert.equal(favorite().getAttribute('aria-pressed'),'true');
+ assert.equal(d.querySelector('#translationList h3').textContent,'Favorites');
+ assert.deepEqual(JSON.parse(dom.window.localStorage.getItem('exegetical-favorite-translations')),['AB_'+id]);
+ assert.equal(d.activeElement,favorite());
+ favorite().click();
+ assert.equal(favorite().getAttribute('aria-pressed'),'false');
+ assert.deepEqual(JSON.parse(dom.window.localStorage.getItem('exegetical-favorite-translations')),[]);
  vm.runInContext(`reportBibleView({});`,context);assert.equal(d.getElementById('apiBibleTracker'),null);vm.runInContext(`reportBibleView({fumsToken:'fixture'});reportBibleView({fumsToken:'second'});`,context);assert.equal(d.querySelectorAll('#apiBibleTracker').length,1);assert.equal(dom.window.fumsData.length,2);dom.window.close();
 });
