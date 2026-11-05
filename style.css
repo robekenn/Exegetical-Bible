@@ -342,3 +342,18 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
  .workspace[data-books] .sidebar,
  .workspace[data-books] .study { transition: none; }
 }
+
+.changelog-page {
+ max-width: 780px;
+ min-height: 100vh;
+ margin: 0 auto;
+ padding: clamp(24px, 6vw, 64px);
+}
+.changelog-header { margin-bottom: 32px; }
+.changelog-header h1 { margin: 24px 0 8px; font-family: var(--serif); }
+.changelog-header p { color: var(--muted); }
+.changelog-header a { color: var(--accent); }
+.changelog-entry { padding: 24px 0; border-top: 1px solid var(--line); }
+.changelog-entry h2 { margin: 0 0 12px; font-size: 20px; }
+.changelog-entry ul { margin: 0; padding-inline-start: 22px; }
+.changelog-entry li { margin: 8px 0; line-height: 1.6; }
