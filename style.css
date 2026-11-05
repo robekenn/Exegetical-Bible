@@ -250,7 +250,7 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
  }
 }
 
-.desktop-panel-button { display: none; }
+.panel-handles { display: none; }
 
 @media (min-width: 761px) {
  .workspace[data-books] {
@@ -275,25 +275,32 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
   background: var(--paper);
  }
  .reader-toolbar .passage-picker-button { min-width: 0; margin-right: auto; }
- .desktop-panel-heading, .study-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
- .desktop-panel-button {
-  display: inline-grid;
+ .panel-handles {
+  display: block;
+  position: sticky;
+  top: 88px;
+  height: 0;
+  z-index: 34;
+  pointer-events: none;
+ }
+ .panel-handle {
+  position: absolute;
+  top: 0;
+  display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
+  width: 32px;
+  height: 48px;
   padding: 0;
   border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--muted);
-  font-size: 22px;
- }
- .desktop-panel-button:hover,
- .desktop-panel-button[aria-expanded="true"] {
+  background: var(--panel);
   color: var(--accent);
-  background: var(--soft);
+  pointer-events: auto;
  }
- .desktop-panel-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+ #toggleBooksPanel { left: 0; border-radius: 0 10px 10px 0; }
+ #toggleStudyPanel { right: 0; border-radius: 10px 0 0 10px; }
+ .panel-handle:hover { background: var(--soft); }
+ .panel-handle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
+ .panel-handle[aria-expanded="true"] svg { transform: rotate(180deg); }
  .verse { scroll-margin-top: 84px; }
 }
 @media (min-width: 761px) and (max-width: 900px) {
