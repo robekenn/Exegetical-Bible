@@ -1,1 +1,13 @@
 .admin-shell{max-width:1200px;margin:40px auto;padding:24px}.admin-shell h1{font:clamp(30px,5vw,48px) var(--serif)}.admin-shell a{color:var(--accent)}.admin-toolbar{display:flex;gap:16px;align-items:center;margin:28px 0}.admin-grid{display:grid;grid-template-columns:minmax(250px,1fr) minmax(0,1.6fr);gap:28px}.report-card{display:block;width:100%;text-align:left;border:1px solid var(--line);padding:18px;margin-bottom:12px;background:var(--panel);border-radius:10px}.report-card[aria-current=true]{border-color:var(--accent);background:var(--soft)}.report-card strong,.report-card small{display:block;margin:5px 0}.report-card p{white-space:pre-wrap;overflow-wrap:anywhere}.admin-shell pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.7 monospace;background:var(--soft);padding:16px;border-radius:8px}.admin-shell textarea{width:100%;min-height:120px}.admin-shell select{font-size:16px;padding:10px}.review-event{padding:12px 0;border-bottom:1px solid var(--line)}.review-event p{white-space:pre-wrap;overflow-wrap:anywhere}#reportDetail{min-width:0}#adminStatus{white-space:pre-wrap}button:focus-visible{outline:2px solid var(--accent);outline-offset:3px}@media(max-width:760px){.admin-shell{margin:0;padding:20px}.admin-grid{grid-template-columns:1fr}.admin-shell input,.admin-shell textarea{font-size:16px}}
+
+.admin-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.admin-tabs button { min-height: 44px; border: 1px solid var(--line); border-radius: 8px; }
+.admin-tabs button[aria-pressed="true"] { background: var(--soft); border-color: var(--accent); }
+.admin-toolbar { flex-wrap: wrap; margin: 16px 0; }
+.admin-toolbar[hidden] { display: none; }
+#reportDetail form { margin-top: 20px; }
+#reportDetail button { margin-top: 10px; min-height: 44px; }
+#reportDetail p { overflow-wrap: anywhere; }
+.feedback-page { max-width: 660px; }
+.feedback-page textarea { font-size: 16px; }
+.feedback-page form button { margin-top: 12px; }
