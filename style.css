@@ -126,3 +126,20 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
  min-width: 0;
  margin-bottom: 0;
 }
+
+.notebook-views {
+ display: flex;
+ gap: 8px;
+ margin-bottom: 16px;
+}
+.notebook-views button {
+ flex: 1;
+ min-height: 44px;
+ border: 1px solid var(--line);
+ border-radius: 10px;
+}
+.notebook-views button[aria-pressed="true"] {
+ background: var(--soft);
+ color: var(--accent);
+ font-weight: 600;
+}
