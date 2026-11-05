@@ -156,7 +156,7 @@ function setupDesktopPanels(){
  const desktop=matchMedia('(min-width: 761px)');
  const key='exegetical-desktop-panels';
  const saved=stored(key,{});
- const choices={books:saved.books,study:saved.study};
+ const choices={books:saved.books,study:saved.study,previous:saved.previous};
  const isOpen=panel=>typeof choices[panel]==='boolean'?choices[panel]:panel==='study'||wide.matches;
  const closeBoth=$('closeSidePanels');
  const controls={
@@ -173,7 +173,11 @@ function setupDesktopPanels(){
    toggle.setAttribute('aria-label',label);
    toggle.title=label;
   }
-  closeBoth.setAttribute('aria-disabled',String(!isOpen('books')&&!isOpen('study')));
+  const expanded=isOpen('books')||isOpen('study');
+  const label=expanded?'Close side panels':'Reopen side panels';
+  closeBoth.setAttribute('aria-expanded',String(expanded));
+  closeBoth.setAttribute('aria-label',label);
+  closeBoth.title=label;
  }
  function change(next){
   workspace.dataset.panelMotion='';
@@ -182,10 +186,16 @@ function setupDesktopPanels(){
   render();
  }
  for(const [panel,toggle] of Object.entries(controls)){
-  toggle.onclick=()=>change({[panel]:!isOpen(panel)});
+  toggle.onclick=()=>change({[panel]:!isOpen(panel),previous:undefined});
  }
  closeBoth.onclick=()=>{
-  if(isOpen('books')||isOpen('study'))change({books:false,study:false});
+  const books=isOpen('books'),study=isOpen('study');
+  if(books||study){
+   change({books:false,study:false,previous:{books,study}});
+  }else{
+   const previous=choices.previous;
+   change({books:previous?.books!==false,study:previous?.study!==false,previous:undefined});
+  }
  };
  wide.addEventListener('change',render);
  desktop.addEventListener('change',render);
