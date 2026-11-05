@@ -90,7 +90,7 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 /* Passage navigation: stable search controls and book-local chapter grids. */
 @media(min-width:1101px){.workspace{grid-template-columns:270px minmax(340px,1fr) 380px}}
 @media(min-width:1500px){.workspace{grid-template-columns:285px minmax(340px,1fr) 420px}}
-.sidebar{padding-top:24px;min-height:0}.sidebar h2{margin-top:10px}.sidebar-search .label{font-size:11px;margin:12px 0 8px}.sidebar-search .searchbox{margin:0;border-radius:10px;padding:0 8px;min-height:46px}.sidebar-search input{font-size:13px;padding:12px 2px}.sidebar-search input::-webkit-search-cancel-button{display:none}.sidebar-search .searchbox:focus-within{outline:2px solid var(--accent);outline-offset:2px}.sidebar-search input:focus{outline:none}.sidebar-search button{padding:5px;min-width:30px;min-height:34px;font-size:20px}.sidebar-search-help{font-size:10px;line-height:1.6;color:var(--muted);margin:8px 0 12px}.sidebar-search-help kbd{border:1px solid var(--line);padding:0 4px;border-radius:3px;font:11px monospace}.sidebar-current{font-size:11px;text-align:left;color:var(--accent);background:var(--soft);padding:10px 12px;margin-bottom:12px;flex-shrink:0}.sidebar .testaments{padding-bottom:8px}.sidebar .testaments button{min-height:36px}.sidebar-search-status{font-size:10px;line-height:1.5;color:var(--muted);margin:10px 0 0;flex-shrink:0}.books{overscroll-behavior:contain;scrollbar-width:thin;padding:6px 2px 20px;scroll-padding:12px}.book-group-label{font-size:9px;letter-spacing:1.1px;text-transform:uppercase;margin:18px 10px 8px;color:var(--muted)}.sidebar-book>button{min-height:48px;padding:10px;border-radius:9px;gap:6px;color:var(--ink)}.sidebar-book>button span:first-child{flex:1;min-width:0}.sidebar-book>button small{display:block;font-size:9px;font-weight:400;color:var(--muted);margin-top:4px}.books .chosen:after{content:none}.book-chevron{font-size:16px;color:var(--muted)}.sidebar-chapters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:6px 4px 12px}.books .sidebar-chapters button{display:block;text-align:center;min-height:36px;margin:0;padding:6px 0;border:1px solid var(--line);border-radius:7px;font-size:12px;color:var(--ink)}.sidebar-chapters button[aria-current=page]{background:var(--accent);color:var(--paper);border-color:var(--accent)}.books .passage-search-result,.mobile-book-grid .passage-search-result{display:flex;flex-direction:column;align-items:flex-start;gap:8px;background:var(--soft);border:1px solid var(--accent);padding:16px 12px;border-radius:10px;color:var(--ink);grid-column:1/-1;margin-bottom:12px}.passage-search-result small{font-size:9px;letter-spacing:1px;color:var(--accent)}.passage-search-result strong{font:22px var(--serif)}.passage-search-result span{font-size:11px;color:var(--accent)}.book-search-empty{padding:18px 8px;line-height:1.6;font-size:12px;color:var(--muted)}.sidebar footer{padding:10px 0}.sidebar footer>.small-leaf,.sidebar footer>p{display:none}.sidebar footer .legal-links{font-size:9px;gap:6px}
+.sidebar{padding-top:24px;min-height:0}.sidebar h2{margin-top:10px}.sidebar-search .label{font-size:11px;margin:12px 0 8px}.sidebar-search .searchbox{margin:0;border-radius:10px;padding:0 8px;min-height:46px}.sidebar-search input{font-size:13px;padding:12px 2px}.sidebar-search input::-webkit-search-cancel-button{display:none}.sidebar-search .searchbox:focus-within{outline:2px solid var(--accent);outline-offset:2px}.sidebar-search input:focus{outline:none}.sidebar-search button{padding:5px;min-width:30px;min-height:34px;font-size:20px}.sidebar-search-help{font-size:10px;line-height:1.6;color:var(--muted);margin:8px 0 12px}.sidebar-search-help kbd{border:1px solid var(--line);padding:0 4px;border-radius:3px;font:11px monospace}.sidebar .testaments{padding-bottom:8px}.sidebar .testaments button{min-height:36px}.sidebar-search-status{font-size:10px;line-height:1.5;color:var(--muted);margin:10px 0 0;flex-shrink:0}.books{overscroll-behavior:contain;scrollbar-width:thin;padding:6px 2px 20px;scroll-padding:12px}.book-group-label{font-size:9px;letter-spacing:1.1px;text-transform:uppercase;margin:18px 10px 8px;color:var(--muted)}.sidebar-book>button{min-height:48px;padding:10px;border-radius:9px;gap:6px;color:var(--ink)}.sidebar-book>button span:first-child{flex:1;min-width:0}.sidebar-book>button small{display:block;font-size:9px;font-weight:400;color:var(--muted);margin-top:4px}.books .chosen:after{content:none}.book-chevron{font-size:16px;color:var(--muted)}.sidebar-chapters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px;padding:6px 4px 12px}.books .sidebar-chapters button{display:block;text-align:center;min-height:36px;margin:0;padding:6px 0;border:1px solid var(--line);border-radius:7px;font-size:12px;color:var(--ink)}.sidebar-chapters button[aria-current=page]{background:var(--accent);color:var(--paper);border-color:var(--accent)}.books .passage-search-result,.mobile-book-grid .passage-search-result{display:flex;flex-direction:column;align-items:flex-start;gap:8px;background:var(--soft);border:1px solid var(--accent);padding:16px 12px;border-radius:10px;color:var(--ink);grid-column:1/-1;margin-bottom:12px}.passage-search-result small{font-size:9px;letter-spacing:1px;color:var(--accent)}.passage-search-result strong{font:22px var(--serif)}.passage-search-result span{font-size:11px;color:var(--accent)}.book-search-empty{padding:18px 8px;line-height:1.6;font-size:12px;color:var(--muted)}.sidebar footer{padding:10px 0}.sidebar footer>.small-leaf,.sidebar footer>p{display:none}.sidebar footer .legal-links{font-size:9px;gap:6px}
 @media(min-width:901px) and (max-width:1100px){.workspace{grid-template-columns:225px minmax(320px,1fr) 300px}.sidebar-search input{font-size:12px}}
 
 .commentary-unavailable{border:1px solid var(--line);border-radius:12px;padding:20px;background:var(--paper);line-height:1.7}.commentary-unavailable h3{margin:0 0 12px;font:24px/1.3 var(--serif)}.commentary-unavailable p{font-size:13px;color:var(--muted)}.commentary-unavailable button{border:1px solid var(--line);min-height:44px;color:var(--accent)}#commentaryHelp{margin:8px 0 20px}#commentarySelect{width:100%;min-height:44px}#commentaryContent{min-width:0}
@@ -144,13 +144,6 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
  font-weight: 600;
 }
 
-.verse-search-launch {
- width: 100%;
- min-height: 44px;
- border: 1px solid var(--line);
- border-radius: 10px;
- color: var(--accent);
-}
 .verse-search-result {
  display: block;
  width: 100%;
@@ -170,3 +163,32 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
  margin-top: 5px;
  font: 17px/1.55 var(--serif);
 }
+
+.mobile-bible-search {
+ display: flex;
+ align-items: stretch;
+ gap: 8px;
+ margin-bottom: 12px;
+}
+#modalBody .mobile-bible-search .full-input {
+ flex: 1;
+ min-width: 0;
+ margin: 0;
+}
+#submitMobileBibleSearch, #submitBookSearch {
+ flex: 0 0 44px;
+ min-width: 44px;
+ min-height: 44px;
+ border: 1px solid var(--line);
+ border-radius: 8px;
+ color: var(--accent);
+}
+.mobile-book-grid > .inline-verse-search {
+ grid-column: 1 / -1;
+}
+.inline-verse-search .label select {
+ display: block;
+ margin-top: 6px;
+}
+
+.sidebar-search .searchbox input { min-width: 0; }
