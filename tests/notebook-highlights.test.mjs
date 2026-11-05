@@ -19,18 +19,37 @@ test('notebook groups consecutive saved highlights and opens the first verse', a
    state.books=[{id:'JHN',name:'John',numberOfChapters:21}];
    state.highlights={'JHN.3.18':true,'JHN.3.16':true,'JHN.3.17':true,'JHN.3.19':false,'JHN.3.20':true,'JHN.4.1':true};
    state.notes={'JHN.3.16':{book:'JHN',bookName:'John',chapter:3,verse:16,text:'Personal note',updatedAt:'2026-11-04'}};
+   api=async path=>({
+    chapter:{content:Array.from({length:21},(_,i)=>({type:'verse',number:i+1,content:['Synthetic verse '+(i+1)]}))},
+    translation:{shortName:'BSB',licenseUrl:'https://example.test/'}
+   });
    let opened;
    navigate=async (...args)=>{opened=args.join('.');};
   `,context);
   document.getElementById('notebookNav').click();
   assert.match(document.getElementById('noteList').textContent,/Personal note/);
   document.querySelector('[data-notebook-view="highlights"]').click();
-  const labels=()=>[...document.querySelectorAll('[data-highlight-passage]')].map(button=>button.textContent);
-  assert.deepEqual(labels(),['John 3:16–18 ↗','John 3:20 ↗','John 4:1 ↗']);
+  const labels=()=>[...document.querySelectorAll('[data-highlight-card] h3')].map(heading=>heading.textContent);
+  assert.deepEqual(labels(),['John 3:16–18','John 3:20','John 4:1']);
+  await new Promise(resolve=>setImmediate(resolve));
+  const card=document.querySelector('[data-highlight-card]');
+  const text=card.querySelector('[data-highlight-text]').textContent;
+  for(const verse of [16,17,18])assert.match(text,new RegExp('Synthetic verse '+verse));
+  assert.match(card.querySelector('[data-highlight-notes]').textContent,/Personal note/);
+  card.querySelector('[data-add-highlight-note]').click();
+  const editor=card.querySelector('form');
+  editor.elements.verse.value='17';
+  editor.elements.verse.dispatchEvent(new dom.window.Event('change'));
+  editor.elements.text.value='Note from the highlight card';
+  editor.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
+  assert.equal(vm.runInContext("state.notes['JHN.3.17'].text",context),'Note from the highlight card');
+  assert.match(card.querySelector('[data-highlight-notes]').textContent,/Personal note/);
+  assert.match(card.querySelector('[data-highlight-notes]').textContent,/Note from the highlight card/);
   const search=document.getElementById('noteSearch');
   search.value='John 3:16-18';
   search.dispatchEvent(new dom.window.Event('input'));
-  assert.deepEqual(labels(),['John 3:16–18 ↗']);
+  await new Promise(resolve=>setTimeout(resolve,250));
+  assert.deepEqual(labels(),['John 3:16–18']);
   document.querySelector('[data-highlight-passage]').click();
   assert.equal(vm.runInContext('opened',context),'JHN.3.16');
   assert.equal(modal.open,false);
