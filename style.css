@@ -249,3 +249,63 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
   pointer-events: auto;
  }
 }
+
+.desktop-panel-button { display: none; }
+
+@media (min-width: 761px) {
+ .workspace[data-books] {
+  --books-column: 225px;
+  --study-column: 300px;
+  grid-template-columns: var(--books-column) minmax(0, 1fr) var(--study-column);
+ }
+ .workspace[data-books="closed"] { --books-column: 0px; }
+ .workspace[data-study="closed"] { --study-column: 0px; }
+ .workspace[data-books] .sidebar { grid-column: 1; grid-row: 1; }
+ .workspace[data-books] #reader { grid-column: 2; grid-row: 1; }
+ .workspace[data-books] .study { grid-column: 3; grid-row: 1; min-width: 0; }
+ .workspace[data-books="open"] .sidebar { display: flex; }
+ .workspace[data-books="closed"] .sidebar,
+ .workspace[data-study="closed"] .study,
+ body.focus .workspace[data-books] .sidebar { display: none; }
+ .reader-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 36;
+  gap: 8px;
+  background: var(--paper);
+ }
+ .reader-toolbar .passage-picker-button { min-width: 0; margin-right: auto; }
+ .desktop-panel-heading, .study-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+ .desktop-panel-button {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 22px;
+ }
+ .desktop-panel-button:hover,
+ .desktop-panel-button[aria-expanded="true"] {
+  color: var(--accent);
+  background: var(--soft);
+ }
+ .desktop-panel-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+ .verse { scroll-margin-top: 84px; }
+}
+@media (min-width: 761px) and (max-width: 900px) {
+ .workspace[data-books="open"] { --books-column: 175px; }
+ .workspace[data-study="open"] { --study-column: 265px; }
+ .reader-toolbar { padding-inline: 12px; }
+}
+@media (min-width: 1101px) {
+ .workspace[data-books="open"] { --books-column: 270px; }
+ .workspace[data-study="open"] { --study-column: 380px; }
+}
+@media (min-width: 1500px) {
+ .workspace[data-books="open"] { --books-column: 285px; }
+ .workspace[data-study="open"] { --study-column: 420px; }
+}
