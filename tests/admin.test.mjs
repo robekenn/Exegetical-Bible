@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createAdminHandler} from '../api/admin.js';
 const uid='11111111-1111-4111-8111-111111111111',report='22222222-2222-4222-8222-222222222222';
 const env={SUPABASE_URL:'https://example.supabase.co',SUPABASE_PUBLISHABLE_KEY:'public',SUPABASE_SECRET_KEY:'secret',ADMIN_USER_IDS:uid};
-function harness({user=uid,authError=false,config=env,role=false,mailer=null}={}){let privileged=0,calls=[];const make=(url,key)=>{if(key==='public')return {auth:{getUser:async()=>({data:{user:user?{id:user}:null},error:authError})}};privileged++;const query={select(){return this;},eq(){return this;},order(){return this;},range:async()=>({data:[]}),single:async()=>({data:{id:report,details:'Report evidence'}}),limit:async()=>({data:[]})};return {from:()=>query,rpc:async(name,payload)=>{calls.push({name,payload});return {data:name==='moderation_is_admin'?role:name==='moderation_change'?report:name==='moderation_claim_email'?[{attempt:report,email:'fixture@example.test',reason:'Fixture violation',appeal_token:uid}]:null};}};};const handler=createAdminHandler(make,config,()=>mailer);return {calls,get privileged(){return privileged;},async run(overrides={}){const res={headers:{},setHeader(k,v){this.headers[k]=v;},status(n){this.code=n;return this;},json(data){this.data=data;return this;}};await handler({method:'GET',headers:{authorization:'Bearer valid',origin:'https://example.test',host:'example.test'},query:{},...overrides},res);return res;}};}
+function harness({user=uid,authError=false,config=env,role=false,mailer=null}={}){let privileged=0,calls=[];const make=(url,key)=>{if(key==='public')return {auth:{getUser:async()=>({data:{user:user?{id:user}:null},error:authError})}};privileged++;const query={select(){return this;},eq(){return this;},order(){return this;},range:async()=>({data:[]}),single:async()=>({data:{id:report,details:'Report evidence'}}),limit:async()=>({data:[]})};return {from:()=>query,rpc:async(name,payload)=>{calls.push({name,payload});return {data:name==='moderation_is_admin'?role:name==='moderation_change'?report:['moderation_claim_email','moderation_claim_appeal_email'].includes(name)?[{attempt:report,email:'fixture@example.test',reason:'Fixture violation',appeal_token:uid,decision:name==='moderation_claim_appeal_email'?'accepted':undefined}]:null};}};};const handler=createAdminHandler(make,config,()=>mailer);return {calls,get privileged(){return privileged;},async run(overrides={}){const res={headers:{},setHeader(k,v){this.headers[k]=v;},status(n){this.code=n;return this;},json(data){this.data=data;return this;}};await handler({method:'GET',headers:{authorization:'Bearer valid',origin:'https://example.test',host:'example.test'},query:{},...overrides},res);return res;}};}
 test('admin API rejects unauthenticated and unauthorized users before accessing reports',async()=>{for(const options of [{user:null},{authError:true},{user:report},{config:{...env,ADMIN_USER_IDS:''}}]){const h=harness(options),r=await h.run();assert.ok([401,403].includes(r.code));assert.ok(h.calls.every(call=>call.name==='moderation_is_admin'));assert.match(r.headers['Cache-Control'],/no-store/);}const h=harness();assert.equal((await h.run({headers:{}})).code,401);assert.equal(h.privileged,0);});
 test('admin review requires same origin, validated input, and records the verified actor atomically',async()=>{const h=harness();assert.equal((await h.run({method:'POST',headers:{origin:'https://evil.test',host:'example.test'}})).code,403);assert.equal(h.privileged,0);assert.equal((await h.run({method:'POST',body:{report_id:report,status:'resolved',note:''}})).code,400);const r=await h.run({method:'POST',body:{report_id:report,status:'resolved',note:' Reviewed evidence. ',actor:report}});assert.equal(r.code,200);assert.deepEqual(h.calls,[{name:'review_community_report',payload:{p_report:report,p_actor:uid,p_status:'resolved',p_note:'Reviewed evidence.'}}]);});
 test('authorized admin can list and inspect reports; malformed filters are rejected',async()=>{const h=harness();assert.equal((await h.run()).code,200);assert.equal((await h.run({query:{id:report}})).data.report.id,report);assert.equal((await h.run({query:{id:'invalid'}})).code,400);assert.equal((await h.run({query:{status:'nonsense'}})).code,400);});
@@ -31,4 +31,18 @@ test('ban requires explicit confirmation and reports mail failure separately fro
  assert.equal(h.calls[0].payload.p_actor,uid);
  assert.deepEqual(h.calls.map(call=>call.name),['moderation_change','moderation_claim_email','moderation_finish_email']);
  assert.equal(h.calls.at(-1).payload.p_sent,false);
+});
+
+test('appeal decision uses the verified actor and can retry mail without changing the decision',async()=>{
+ const mail=[];
+ const h=harness({mailer:async notice=>mail.push(notice)});
+ const body={action:'decide_appeal',target:report,decision:'accepted',reason:'Fixture appeal decision',actor:report};
+ assert.equal((await h.run({method:'POST',body:{...body,decision:'unknown'}})).code,400);
+ assert.deepEqual((await h.run({method:'POST',body})).data,{ok:true,emailStatus:'sent'});
+ assert.equal(h.calls[0].name,'moderation_decide_appeal');
+ assert.equal(h.calls[0].payload.p_actor,uid);
+ assert.equal(mail[0].decision,'accepted');
+ await h.run({method:'POST',body:{action:'retry_appeal_email',target:report}});
+ assert.equal(h.calls.filter(call=>call.name==='moderation_decide_appeal').length,1);
+ assert.equal(h.calls.filter(call=>call.name==='moderation_finish_appeal_email').length,2);
 });
