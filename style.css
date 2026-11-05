@@ -358,7 +358,6 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 .changelog-entry ul { margin: 0; padding-inline-start: 22px; }
 .changelog-entry li { margin: 8px 0; line-height: 1.6; }
 
-#closeSidePanels[aria-disabled="true"] { opacity: .45; cursor: default; }
 @media (max-width: 760px) {
  #closeSidePanels { display: none; }
 }
