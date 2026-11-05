@@ -143,3 +143,30 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
  color: var(--accent);
  font-weight: 600;
 }
+
+.verse-search-launch {
+ width: 100%;
+ min-height: 44px;
+ border: 1px solid var(--line);
+ border-radius: 10px;
+ color: var(--accent);
+}
+.verse-search-result {
+ display: block;
+ width: 100%;
+ min-height: 48px;
+ text-align: start;
+ padding: 12px 14px;
+ margin: 8px 0;
+ border: 1px solid var(--line);
+ border-radius: 10px;
+ background: var(--paper);
+}
+.verse-search-result strong {
+ color: var(--accent);
+}
+.verse-search-result span {
+ display: block;
+ margin-top: 5px;
+ font: 17px/1.55 var(--serif);
+}

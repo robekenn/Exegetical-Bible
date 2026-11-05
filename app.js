@@ -185,6 +185,90 @@ $('translationButton').onclick=()=>{
  render();
  $('pickerTranslationSearch').focus();
 };
+function openVerseSearch(initial='',back){
+ const supported=state.translations.filter(t=>/^(BSB|ESV|AB_[a-f0-9]{16}-[0-9]{2})$/.test(t.id));
+ const current=supported.find(t=>t.id===state.translation);
+ const edition=current||supported.find(t=>t.id==='BSB')||supported[0];
+ if(!edition)return toast('Wait for the Bible to finish opening.');
+ modal('Search verse text',`
+  ${back?'<button type="button" class="mobile-back" id="verseSearchBack">← Book and chapter</button>':''}
+  <form id="verseSearchForm">
+   <label class="label" for="verseSearchWords">Words or phrase</label>
+   <input id="verseSearchWords" class="full-input" type="search" required minlength="2" maxlength="120" placeholder="Be still and know" value="${esc(initial.slice(0,120))}">
+   <label class="label" for="verseSearchEdition">Search in</label>
+   <select id="verseSearchEdition" class="full-input">${supported.map(t=>`<option value="${esc(t.id)}"${t.id===edition.id?' selected':''}>${esc(t.shortName||t.id)} · ${esc(t.name)}</option>`).join('')}</select>
+   ${current?'':'<p class="muted">Verse search is unavailable in your reading translation. Choose a translation to search.</p>'}
+   <button class="primary" type="submit">Search verses</button>
+  </form>
+  <p id="verseSearchStatus" class="muted" role="status"></p>
+  <div id="verseSearchResults"></div>`);
+ const form=$('verseSearchForm'),input=$('verseSearchWords'),select=$('verseSearchEdition');
+ const status=$('verseSearchStatus'),results=$('verseSearchResults'),dialog=$('modal');
+ let controller,opening=false;
+ const close=()=>controller?.abort();
+ dialog.addEventListener('close',close,{once:true});
+ if(back)$('verseSearchBack').onclick=()=>{close();back();};
+ function clearResults(){
+  controller?.abort();
+  results.replaceChildren();
+  status.textContent='';
+ }
+ input.oninput=clearResults;
+ select.onchange=clearResults;
+ async function openResult(result,translation){
+  if(opening)return;
+  opening=true;
+  try{
+   const books=translation===state.translation?state.books:(await api(`${translation}/books.json`)).books;
+   if(!results.isConnected||!dialog.open)return;
+   const book=books.find(book=>book.id===result.book);
+   if(!book||result.chapter>book.numberOfChapters)throw Error('This result is unavailable in that edition.');
+   state.translation=translation;
+   state.books=books;
+   dialog.close();
+   await navigate(result.book,result.chapter,result.verse);
+   if(state.data&&state.translation===translation&&state.book===result.book&&state.chapter===result.chapter){
+    document.querySelector(`[data-verse="${state.verse}"]`)?.scrollIntoView({block:'center'});
+    if(state.verse!==result.verse)toast('Opened the chapter because this verse number is unavailable.');
+   }
+  }catch(error){
+   if(results.isConnected&&dialog.open)status.textContent=error.message;
+  }finally{opening=false;}
+ }
+ async function run(page){
+  const q=input.value.trim(),translation=select.value;
+  if(q.length<2){status.textContent='Enter at least two characters.';return;}
+  clearResults();
+  const active=new AbortController();
+  controller=active;
+  status.textContent='Searching verses…';
+  try{
+   const params=new URLSearchParams({path:'search.json',q,translation,page:String(page)});
+   const response=await fetch('/api/bible?'+params,{signal:AbortSignal.any([active.signal,AbortSignal.timeout(22000)])});
+   const data=await response.json();
+   if(active.signal.aborted||!results.isConnected||!dialog.open)return;
+   if(!response.ok)throw Error(data.error||'Search could not finish.');
+   const hits=data.results;
+   status.textContent=hits.length?`Page ${page} · ${hits.length} ${hits.length===1?'result':'results'}`:'No matching verses. Try different words.';
+   results.innerHTML=hits.map((hit,index)=>`<button type="button" class="verse-search-result" data-verse-result="${index}">
+    <strong>${esc(hit.reference)}</strong>${hit.text?`<span dir="${data.textDirection==='rtl'?'rtl':'ltr'}">${esc(hit.text)}</span>`:''}
+   </button>`).join('')+(hits.length?`<p class="attribution"><a href="${safeURL(data.licenseUrl)}" target="_blank" rel="noopener noreferrer">Translation source & license ↗</a>${data.licenseNotice?'<br>'+esc(data.licenseNotice):''}</p>`:'')
+   +`<div class="button-row">${page>1?'<button type="button" id="verseSearchPrevious">← Previous results</button>':''}${data.hasMore?'<button type="button" id="verseSearchNext">Next results →</button>':''}</div>`;
+   results.querySelectorAll('[data-verse-result]').forEach(button=>button.onclick=()=>openResult(hits[Number(button.dataset.verseResult)],translation));
+   if($('verseSearchPrevious'))$('verseSearchPrevious').onclick=()=>run(page-1);
+   if($('verseSearchNext'))$('verseSearchNext').onclick=()=>run(page+1);
+   if(hits.some(hit=>hit.text))reportBibleView(data);
+  }catch(error){
+   if(!active.signal.aborted&&results.isConnected&&dialog.open){
+    status.textContent=error.name==='TimeoutError'?'Search timed out. Try again.':error.message;
+   }
+  }
+ }
+ form.onsubmit=event=>{event.preventDefault();run(1);};
+ input.focus();
+ if(initial.trim().length>=2)run(1);
+}
+
 function exportNotes(){const blob=new Blob([JSON.stringify({format:'exegetical-backup',version:1,exportedAt:new Date().toISOString(),notes:state.notes,highlights:state.highlights},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='exegetical-notes-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
 function highlightedPassages(highlights){
  const verses=Object.entries(highlights).flatMap(([key,highlighted])=>{
@@ -273,11 +357,12 @@ async function init(){noteCount();try{const [translations,commentaries,features,
 let bookNavigation;
 let streak,highlightTools;
 async function start(){
- bookNavigation=setupBookSidebar({state,esc,navigate,toast});
+ bookNavigation=setupBookSidebar({state,esc,navigate,toast,openVerseSearch});
+ $('desktopVerseSearch').onclick=()=>openVerseSearch($('bookFilter').value);
  setupForegroundScroll();
  highlightTools=setupPassageHighlights({state,save,renderChapter,canEdit:()=>!account||account.canEdit(),toast});
  streak=setupStreak({modal,toast,read:stored,write:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}},changed:()=>account?.preferencesChanged(),canRead:()=>Boolean(state.data)&&(!account||account.canEdit())});
- setupMobile({state,modal,esc,navigate,toast});
+ setupMobile({state,modal,esc,navigate,toast,openVerseSearch});
  await init();
  account=await createAccount({state,esc,modal,toast,refresh:(options={})=>{noteCount();if(options.background){document.querySelectorAll('[data-verse]').forEach(el=>{const k=state.book+'.'+state.chapter+'.'+el.dataset.verse;el.classList.toggle('highlighted',Boolean(state.highlights[k]));let dot=el.querySelector('.note-dot');if(state.notes[k]?.text&&!dot){dot=document.createElement('span');dot.className='note-dot';dot.textContent='✎';dot.setAttribute('aria-label','Has note');el.append(dot);}else if(!state.notes[k]?.text&&dot)dot.remove();});const editor=$('noteText');if(editor&&document.activeElement!==editor)editor.value=state.notes[key()]?.text||'';return;}renderChapter();renderStudy();},
  localRead:stored,localWrite:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}},
