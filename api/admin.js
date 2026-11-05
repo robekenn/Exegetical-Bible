@@ -7,13 +7,14 @@ const statuses=['open','reviewing','resolved','dismissed'];
 const categories=['abuse','bug','feedback','appeal','privacy','support','accessibility'];
 const options={auth:{persistSession:false,autoRefreshToken:false}};
 
-async function deliverNotice(db,send,ban){
- const {data,error}=await db.rpc('moderation_claim_email',{p_ban:ban});
+async function deliverNotice(db,send,id,appeal=false){
+ const target=appeal?{p_report:id}:{p_ban:id};
+ const {data,error}=await db.rpc(appeal?'moderation_claim_appeal_email':'moderation_claim_email',target);
  if(error||!data?.length)return 'pending';
  const notice=data[0];
  let sent=false;
  try{await send(notice);sent=true;}catch{}
- const result=await db.rpc('moderation_finish_email',{p_ban:ban,p_attempt:notice.attempt,p_sent:sent});
+ const result=await db.rpc(appeal?'moderation_finish_appeal_email':'moderation_finish_email',{...target,p_attempt:notice.attempt,p_sent:sent});
  return result.error?'pending':sent?'sent':'failed';
 }
 
@@ -49,7 +50,7 @@ export function createAdminHandler(makeClient=createClient,env=process.env,makeM
     const b=req.body||{};
     if(b.action){
      const {action,target}=b;
-     if(!['promote','demote','ban','lift','retry_email'].includes(action)||typeof target!=='string'||!uuid.test(target)){
+     if(!['promote','demote','ban','lift','retry_email','decide_appeal','retry_appeal_email'].includes(action)||typeof target!=='string'||!uuid.test(target)){
       return res.status(400).json({error:'Choose a valid moderation action and target.'});
      }
      if(['promote','demote'].includes(action)&&!owner)return res.status(403).json({error:'Only owners can change admin roles.'});
@@ -64,6 +65,22 @@ export function createAdminHandler(makeClient=createClient,env=process.env,makeM
      const send=['ban','retry_email'].includes(action)?makeMailer(env):null;
      if(['ban','retry_email'].includes(action)&&!send){
       return res.status(503).json({error:'Configure moderation email before banning accounts or sending notices.'});
+     }
+     if(action==='decide_appeal'||action==='retry_appeal_email'){
+      if(action==='decide_appeal'&&(!['accepted','denied'].includes(b.decision)||reason.length<10||reason.length>2000)){
+       return res.status(400).json({error:'Choose a decision and enter a reason of 10–2000 characters.'});
+      }
+      const sendAppeal=makeMailer(env);
+      if(!sendAppeal)return res.status(503).json({error:'Configure moderation email before sending appeal decisions.'});
+      if(action==='decide_appeal'){
+       const decision=await db.rpc('moderation_decide_appeal',{
+        p_actor:actor,p_report:target,p_decision:b.decision,p_reason:reason,p_owners:owners
+       });
+       if(decision.error)throw decision.error;
+      }
+      let emailStatus;
+      try{emailStatus=await deliverNotice(db,sendAppeal,target,true);}catch{emailStatus='pending';}
+      return res.status(200).json({ok:true,emailStatus});
      }
      if(action==='retry_email')return res.status(200).json({emailStatus:await deliverNotice(db,send,target)});
      const change=await db.rpc('moderation_change',{
@@ -104,7 +121,13 @@ export function createAdminHandler(makeClient=createClient,env=process.env,makeM
      db.from('report_review_events').select('*').eq('report_id',q.id).order('created_at',{ascending:false}).limit(100)
     ]);
     if(report.error||history.error)throw report.error||history.error;
-    return res.status(200).json({report:report.data,history:history.data});
+    let appeal;
+    if(report.data.category==='appeal'&&report.data.ban_id){
+     const result=await db.rpc('moderation_appeal_status',{p_report:q.id});
+     if(result.error)throw result.error;
+     appeal=result.data[0]||null;
+    }
+    return res.status(200).json({report:report.data,history:history.data,appeal});
    }
    let query=db.from('community_reports').select('id,reporter,subject,category,details,status,created_at');
    if(q.status&&q.status!=='all'){
