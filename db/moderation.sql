@@ -181,4 +181,92 @@ grant execute on function public.moderation_is_admin(uuid),public.moderation_use
  public.moderation_change(uuid,uuid,text,text,uuid[]),public.moderation_bans(integer,uuid),
  public.moderation_audit(integer),public.moderation_claim_email(uuid),public.moderation_finish_email(uuid,uuid,boolean),
  public.moderation_submit(uuid,text,text,text,uuid) to service_role;
+create table if not exists moderation.appeal_decisions (
+ report_id uuid primary key references public.community_reports(id),
+ decision text not null check(decision in ('accepted','denied')),
+ reason text not null check(length(reason) between 10 and 2000),
+ created_at timestamptz not null default now(),
+ email_status text not null default 'pending' check(email_status in ('pending','sending','sent','failed')),
+ email_attempt uuid,
+ email_attempted_at timestamptz
+);
+
+create or replace function public.moderation_decide_appeal(p_actor uuid,p_report uuid,p_decision text,p_reason text,p_owners uuid[])
+returns void language plpgsql security definer set search_path='' as $$
+declare ban uuid;
+begin
+ perform pg_catalog.pg_advisory_xact_lock(731892145);
+ if not coalesce(p_actor=any(p_owners),false) and not public.moderation_is_admin(p_actor) then
+  raise exception using errcode='42501',message='Administrator access required.';
+ end if;
+ if p_decision is null or p_decision not in ('accepted','denied') or p_reason is null or length(trim(p_reason)) not between 10 and 2000 then
+  raise exception using errcode='P0001',message='Choose a decision and enter a reason of 10–2000 characters.';
+ end if;
+ select ban_id into ban from public.community_reports where id=p_report and category='appeal' for update;
+ if ban is null then raise exception using errcode='P0001',message='Appeal not found.'; end if;
+ if exists(select 1 from moderation.appeal_decisions where report_id=p_report) then
+  raise exception using errcode='P0001',message='This appeal already has a decision.';
+ end if;
+ if p_decision='denied' and exists(select 1 from moderation.bans where id=ban and lifted_at is not null) then
+  raise exception using errcode='P0001',message='The block has already been lifted. Record an accepted decision instead.';
+ end if;
+ if p_decision='accepted' then
+  update moderation.bans set lifted_at=now() where id=ban and lifted_at is null;
+ end if;
+ insert into moderation.appeal_decisions(report_id,decision,reason) values(p_report,p_decision,trim(p_reason));
+ update public.community_reports set status='resolved' where id=p_report;
+ insert into public.report_review_events(report_id,actor,status,note)
+ values(p_report,p_actor,'resolved',trim(p_reason));
+ insert into moderation.audit(actor,target,action,reason)
+ values(p_actor,ban,'appeal_'||p_decision,trim(p_reason));
+end;
+$$;
+
+create or replace function public.moderation_appeal_status(p_report uuid)
+returns table(decision text,reason text,email_status text)
+language sql stable security definer set search_path='' as $$
+ select d.decision,d.reason,d.email_status from moderation.appeal_decisions d where d.report_id=p_report;
+$$;
+
+create or replace function public.moderation_claim_appeal_email(p_report uuid)
+returns table(email text,reason text,decision text,attempt uuid)
+language sql security definer set search_path='' as $$
+ update moderation.appeal_decisions d set email_status='sending',email_attempt=gen_random_uuid(),email_attempted_at=now()
+ from public.community_reports r join moderation.bans b on b.id=r.ban_id
+ where d.report_id=p_report and r.id=d.report_id and
+ (d.email_status in ('pending','failed') or (d.email_status='sending' and d.email_attempted_at<now()-interval '5 minutes'))
+ returning b.email,d.reason,d.decision,d.email_attempt;
+$$;
+
+create or replace function public.moderation_finish_appeal_email(p_report uuid,p_attempt uuid,p_sent boolean)
+returns void language sql security definer set search_path='' as $$
+ update moderation.appeal_decisions set email_status=case when p_sent then 'sent' else 'failed' end
+ where report_id=p_report and email_attempt=p_attempt and email_status='sending';
+$$;
+
+revoke all on function public.moderation_decide_appeal(uuid,uuid,text,text,uuid[]),
+ public.moderation_appeal_status(uuid),public.moderation_claim_appeal_email(uuid),
+ public.moderation_finish_appeal_email(uuid,uuid,boolean) from public,anon,authenticated;
+grant execute on function public.moderation_decide_appeal(uuid,uuid,text,text,uuid[]),
+ public.moderation_appeal_status(uuid),public.moderation_claim_appeal_email(uuid),
+ public.moderation_finish_appeal_email(uuid,uuid,boolean) to service_role;
+-- Keep ordinary review updates from reopening or closing a decided appeal.
+create or replace function public.review_community_report(p_report uuid,p_actor uuid,p_status text,p_note text)
+returns void language plpgsql security definer set search_path='' as $$
+declare kind text;
+begin
+ if p_status is null or p_status not in ('open','reviewing','resolved','dismissed')
+  or p_note is null or length(trim(p_note)) not between 1 and 2000 then
+  raise exception using errcode='P0001',message='Invalid review.';
+ end if;
+ select category into kind from public.community_reports where id=p_report for update;
+ if not found then raise exception using errcode='P0001',message='Report not found.'; end if;
+ if kind='appeal' and (p_status in ('resolved','dismissed') or
+  exists(select 1 from moderation.appeal_decisions where report_id=p_report)) then
+  raise exception using errcode='P0001',message='Use the appeal decision controls to close an appeal.';
+ end if;
+ update public.community_reports set status=p_status where id=p_report;
+ insert into public.report_review_events(report_id,actor,status,note) values(p_report,p_actor,p_status,trim(p_note));
+end;
+$$;
 commit;
