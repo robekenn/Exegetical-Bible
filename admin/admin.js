@@ -114,8 +114,10 @@ async function detail(id){
  const requestVersion=++version;
  $('reportDetail').innerHTML='<p>Loading submission…</p>';
  try{
-  const {report,history}=await request({id});
+  const {report,history,appeal}=await request({id});
   if(requestVersion!==version)return;
+  const isAppeal=report.category==='appeal'&&Boolean(report.ban_id);
+  const availableStatuses=isAppeal?['open','reviewing']:reviewStatuses;
   $('reportDetail').innerHTML=`<h2>${esc(types[report.category]||report.category)}</h2>
    <p class="muted">${esc(report.id)}</p>
    <p>Submitted by ${esc(report.reporter||'Guest or deleted account')}${report.subject?`<br>Reported user: ${esc(report.subject)}`:''}</p>
@@ -123,24 +125,59 @@ async function detail(id){
    ${report.ban_id?'<button type="button" id="findAppealedBan">View ban</button>':''}
    <h3>Details</h3><pre>${esc(report.details)}</pre>
    ${report.evidence?`<h3>Message evidence</h3><pre>${esc(JSON.stringify(report.evidence,null,2))}</pre>`:''}
-   <form id="reviewForm">
+   ${appeal?'':`<form id="reviewForm">
     <label class="label" for="reviewStatus">Status</label>
-    <select id="reviewStatus">${reviewStatuses.map(item=>`<option ${item===report.status?'selected':''}>${item}</option>`).join('')}</select>
+    <select id="reviewStatus">${availableStatuses.map(item=>`<option ${item===report.status?'selected':''}>${item}</option>`).join('')}</select>
     <label class="label" for="reviewNote">Internal decision note</label>
     <textarea id="reviewNote" required maxlength="2000"></textarea>
     <button class="primary" type="submit">Save review</button>
-   </form>
+   </form>`}
+   ${isAppeal?(appeal?`<h3>Appeal ${esc(appeal.decision)}</h3>
+    <p>${esc(appeal.reason)}</p><p>Decision email: ${esc(appeal.email_status)}</p>
+    ${appeal.email_status==='sent'?'':'<button type="button" id="retryAppealEmail">Retry decision email</button>'}`:
+    `<form id="appealDecisionForm">
+     <h3>Decide appeal</h3>
+     <label class="label" for="appealDecision">Decision</label>
+     <select id="appealDecision" required>
+      <option value="">Choose a decision</option>
+      <option value="accepted">Accept and lift the email block</option>
+      <option value="denied">Deny and keep the email block</option>
+     </select>
+     <label class="label" for="appealReason">Reason to email to the person</label>
+     <textarea id="appealReason" required minlength="10" maxlength="2000"></textarea>
+     <button type="submit" class="primary">Record decision and email</button>
+    </form>`):''}
    <h3>Review history</h3>
    ${history.map(item=>`<article class="review-event"><strong>${esc(item.status)}</strong> · ${timestamp(item.created_at)}<p>${esc(item.note)}</p><small>Admin ID: ${esc(item.actor||'Deleted account')}</small></article>`).join('')||'<p>No reviews yet.</p>'}`;
   if(report.subject)$('findReportedUser').onclick=()=>showView('users',{user:report.subject});
   if(report.ban_id)$('findAppealedBan').onclick=()=>showView('bans',{ban:report.ban_id});
-  bindAction($('reviewForm'),async current=>{
+  if($('reviewForm'))bindAction($('reviewForm'),async current=>{
    await request({}, {report_id:id,status:$('reviewStatus').value,note:$('reviewNote').value});
    if(!current())return;
    await list();
    if(view==='reports')await detail(id);
    status('Review saved.');
   });
+  if($('appealDecisionForm'))bindAction($('appealDecisionForm'),async current=>{
+   const decision=$('appealDecision').value;
+   if(!confirm(decision==='accepted'?'Accept this appeal, lift the email block, and notify the person?':'Deny this appeal and notify the person?'))return;
+   const result=await request({}, {action:'decide_appeal',target:id,decision,reason:$('appealReason').value});
+   if(!current())return;
+   await list();
+   if(view==='reports')await detail(id);
+   status(result.emailStatus==='sent'?'Decision recorded and email sent.':'Decision recorded. Retry the email from this appeal.');
+  });
+  if($('retryAppealEmail'))$('retryAppealEmail').onclick=async event=>{
+   const button=event.currentTarget;
+   button.disabled=true;
+   try{
+    const result=await request({}, {action:'retry_appeal_email',target:id});
+    if(requestVersion!==version)return;
+    await detail(id);
+    status(result.emailStatus==='sent'?'Decision email sent.':'Email delivery is pending or failed.');
+   }catch(error){if(requestVersion===version)status(error.message);}
+   finally{button.disabled=false;}
+  };
  }catch(error){if(requestVersion===version)$('reportDetail').textContent=error.message;}
 }
 function userDetail(user,owner,mailConfigured){
