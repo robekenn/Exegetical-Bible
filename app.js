@@ -165,15 +165,19 @@ function setupDesktopPanels(){
  const choices={books:saved.books,study:saved.study};
  const isOpen=panel=>typeof choices[panel]==='boolean'?choices[panel]:panel==='study'||wide.matches;
  const controls={
-  books:{toggle:$('toggleBooksPanel'),close:$('closeBooksPanel')},
-  study:{toggle:$('toggleStudyPanel'),close:$('closeStudyPanel')}
+  books:$('toggleBooksPanel'),
+  study:$('toggleStudyPanel')
  };
  function render(){
   const focused=document.body.classList.contains('focus');
-  for(const [panel,{toggle}] of Object.entries(controls)){
+  for(const [panel,toggle] of Object.entries(controls)){
    const open=isOpen(panel);
    workspace.dataset[panel]=open?'open':'closed';
-   toggle.setAttribute('aria-expanded',String(open&&!focused));
+   const expanded=open&&!focused;
+   const label=(expanded?'Close ':'Open ')+(panel==='books'?'Books':'Study');
+   toggle.setAttribute('aria-expanded',String(expanded));
+   toggle.setAttribute('aria-label',label);
+   toggle.title=label;
   }
  }
  function change(panel,open){
@@ -182,12 +186,8 @@ function setupDesktopPanels(){
   if(open)setReaderFocus(false);
   render();
  }
- for(const [panel,{toggle,close}] of Object.entries(controls)){
+ for(const [panel,toggle] of Object.entries(controls)){
   toggle.onclick=()=>change(panel,document.body.classList.contains('focus')||!isOpen(panel));
-  close.onclick=()=>{
-   change(panel,false);
-   toggle.focus({preventScroll:true});
-  };
  }
  $('focus').addEventListener('click',render);
  $('readNav').addEventListener('click',render);
