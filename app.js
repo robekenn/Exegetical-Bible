@@ -9,6 +9,7 @@ let account=null;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const flatten=v=>typeof v==='string'?v:Array.isArray(v)?v.map(flatten).join(' '):v?.text??(v?.content?flatten(v.content):'');
+const inlineVerse=content=>flatten(content).replace(/\s*[\r\n]+\s*/g,' ').trim();
 const cache=new Map();
 async function api(path){if(!path.startsWith('ESV/')&&!path.startsWith('AB_')&&path!=='available_api_bible.json'&&cache.has(path))return cache.get(path);const r=await fetch('/api/bible?path='+encodeURIComponent(path),{signal:AbortSignal.timeout(20000)});const d=await r.json();if(!r.ok){const error=Error(d.error||'Unable to load this resource.');error.status=r.status;throw error;}if(!path.startsWith('ESV/')&&!path.startsWith('AB_')&&path!=='available_api_bible.json')cache.set(path,d);return d;}
 let apiBibleError='';
@@ -96,7 +97,17 @@ else if(state.tab==='language'){const d=await api(`d/bsb-interlinear/${state.boo
 else if(state.tab==='notes'){renderNotes(quote);}
 else if(state.tab==='compare'){
  const card=(label,text,dir='ltr')=>`<article class="translation-compare-card"><small>${esc(label)}</small><div dir="${dir==='rtl'?'rtl':'ltr'}">${esc(text)}</div></article>`;
- root.innerHTML=`<div class="compare-navigation"><button id="comparePrevious" aria-label="Previous verse">←</button><strong>${esc(ref())}</strong><button id="compareNext" aria-label="Next verse">→</button></div><div class="compare-translation-controls"><span>Compare with</span><button type="button" id="compareTranslationButton" class="version-pill"></button></div><div class="comparison-pair">${card(state.data.translation.shortName||state.translation,flatten(verse.content),state.data.translation.textDirection)}<p class="attribution">${esc(state.data.translation.licenseNotice||'')}</p><div id="comparison" aria-live="polite"></div></div>`;
+ const primary=state.data.translation;
+ const credit=(edition,fallback)=>{
+  const url=edition.licenseUrl||edition.website;
+  const notice=edition.licenseNotice;
+  if(!url&&!notice)return '';
+  return `<p class="attribution"><strong>${esc(edition.shortName||edition.name||fallback)}</strong>${url?` · <a href="${safeURL(url)}" target="_blank" rel="noopener noreferrer">Source &amp; license ↗</a>`:''}${notice?'<br>'+esc(flatten(notice)):''}</p>`;
+ };
+ root.innerHTML=`<div class="compare-navigation"><button id="comparePrevious" aria-label="Previous verse">←</button><strong>${esc(ref())}</strong><button id="compareNext" aria-label="Next verse">→</button></div>
+  <div class="compare-translation-controls"><span>Compare with</span><button type="button" id="compareTranslationButton" class="version-pill"></button></div>
+  <div class="comparison-pair">${card(primary.shortName||state.translation,inlineVerse(verse.content),primary.textDirection)}<div id="comparison" aria-live="polite"></div></div>
+  <footer class="comparison-credits" aria-label="Translation sources">${credit(primary,state.translation)}<div id="comparisonCredit"></div></footer>`;
  const compareButton=$('compareTranslationButton');
  function updateCompareLabel(){
   const edition=state.translations.find(t=>t.id===state.compare);
@@ -111,7 +122,24 @@ else if(state.tab==='compare'){
  });
  const index=verses().findIndex(v=>v.number===state.verse);$('comparePrevious').disabled=index<=0;$('compareNext').disabled=index>=verses().length-1;
  for(const [button,step]of [['comparePrevious',-1],['compareNext',1]])$(button).onclick=()=>{state.verse=verses()[index+step].number;renderChapter();position();renderStudy();};
- let request=0;async function compare(){const token=++request;$('comparison').innerHTML='<p class="loading">Opening translation…</p>';try{const d=await api(`${state.compare}/${state.book}/${state.chapter}.json`);if(id!==studyId||token!==request)return;const v=d.chapter.content.find(v=>v.type==='verse'&&v.number===state.verse);$('comparison').innerHTML=card(d.translation.name,v?flatten(v.content):'This verse is not available in this translation.',d.translation.textDirection)+`<p class="attribution"><a href="${safeURL(d.translation.licenseUrl||d.translation.website)}" target="_blank" rel="noopener noreferrer">Translation source & license ↗</a>${d.translation.licenseNotice?'<br>'+esc(d.translation.licenseNotice):''}</p>`;if(v)reportBibleView(d);}catch(e){if(id===studyId&&token===request)showError($('comparison'),e,compare);}}
+ let request=0;
+ async function compare(){
+  const token=++request,edition=state.compare;
+  $('comparison').innerHTML='<p class="loading">Opening translation…</p>';
+  $('comparisonCredit').replaceChildren();
+  try{
+   const data=await api(`${edition}/${state.book}/${state.chapter}.json`);
+   if(id!==studyId||token!==request)return;
+   const match=data.chapter.content.find(v=>v.type==='verse'&&v.number===state.verse);
+   const t=data.translation;
+   $('comparison').innerHTML=card(t.shortName||t.name,match?inlineVerse(match.content):'This verse is not available in this translation.',t.textDirection);
+   if(match&&edition!==state.translation)$('comparisonCredit').innerHTML=credit(t,edition);
+   if(match)reportBibleView(data);
+  }catch(error){
+   if(id===studyId&&token===request)showError($('comparison'),error,compare);
+  }
+ }
+
  await compare();}}catch(e){if(id!==studyId)return;showError(root,e,renderStudy);}}
 async function loadWord(w,parent){const id=++wordId;const root=$('definition');root.innerHTML='<p class="loading">Opening lexicon…</p>';try{if(!w.strongs)throw Error('No dictionary identifier is supplied for this word.');const d=await api(`d/stepbible-lexicon/lexicon/${w.strongs}.json`);if(id!==wordId||parent!==studyId)return;const senses=d.entry?.senses||[];root.innerHTML=`<div class="lexicon"><div class="source-label">${esc(w.strongs)} · ${esc(w.parsingFull||w.parsing)}</div>${senses.map(s=>`<h3>${esc(s.lemma)} <small>${esc(s.transliteration)}</small></h3><b>${esc(s.gloss)}</b><p>${esc(s.definition)}</p>`).join('')||'<p>No definition available.</p>'}</div>`;}catch(e){if(id===wordId&&parent===studyId)showError(root,e,()=>loadWord(w,parent));}}
 function renderNotes(quote){const root=$('studyBody');const k=key();root.innerHTML=`<div class="study-tool-intro"><h3>Your thoughts on the Word.</h3><p class="muted">Private notes for ${esc(ref())}. Saved as you type.</p></div><details class="note-passage"><summary>Read the selected verse</summary>${quote}</details><div class="note-prompts"><button type="button" data-note-prompt="Observation">Observe</button><button type="button" data-note-prompt="Interpretation">Understand</button><button type="button" data-note-prompt="Application">Apply</button></div><label for="noteText" class="label">Observation, interpretation, application, or a question to revisit.</label><textarea id="noteText" maxlength="200000" class="study-note-editor" placeholder="What stands out? What does it mean? How will you respond?">${esc(state.notes[k]?.text||'')}</textarea><p class="save-status" id="saveStatus">${esc(account?.status()||'Saved on this device.')}</p><div class="button-row"><button id="highlightVerse">${state.highlights[k]?'Remove highlight':'Highlight verse'}</button><button id="copyVerse">Copy verse</button><button id="sendVerseToFriend">Send to friend</button></div><details class="note-more"><summary>More note options</summary><button id="deleteNote" class="danger">Delete this note</button></details><div></div><p class="muted">${account?.isUser()?'Private to your account. Notes and highlights sync across devices.':'Guest notes stay in this browser. Sign in to save them to an account.'} Export a backup from My notebook.</p>`;document.querySelectorAll('[data-note-prompt]').forEach(b=>b.onclick=()=>{if(account&&!account.canEdit())return;const editor=$('noteText');const addition=(editor.value.trim()?'\n\n':'')+b.dataset.notePrompt+':\n';if(editor.value.length+addition.length>200000)return;editor.value+=addition;editor.dispatchEvent(new Event('input'));editor.focus();editor.setSelectionRange(editor.value.length,editor.value.length);});$('noteText').disabled=Boolean(account&&!account.canEdit());$('noteText').oninput=e=>{if(account&&!account.canEdit())return;const text=e.target.value;if(text.trim())state.notes[k]={text,book:state.book,bookName:book().name,chapter:state.chapter,verse:state.verse,updatedAt:new Date().toISOString()};else delete state.notes[k];const ok=save('exegetical-notes',state.notes);$('saveStatus').textContent=ok?(account?.status()||'Saved on this device.'):'Could not save. Export a backup before leaving.';noteCount();renderChapter();};$('highlightVerse').onclick=()=>{if(account&&!account.canEdit())return toast('Load your account before editing.');if(state.highlights[k])delete state.highlights[k];else state.highlights[k]=true;save('exegetical-highlights',state.highlights);renderChapter();renderNotes(quote);};$('copyVerse').onclick=async()=>{try{await navigator.clipboard.writeText(`${ref()} (${state.translation})\n${flatten(verses().find(v=>v.number===state.verse)?.content)}`);toast('Verse copied.');}catch{toast('Clipboard unavailable in this browser.');}};$('sendVerseToFriend').onclick=()=>document.dispatchEvent(new CustomEvent('share-study-verse'));$('deleteNote').onclick=()=>{if(account&&!account.canEdit())return;if(!state.notes[k])return;if(confirm('Delete this note? Export a backup first if you need to keep it.')){delete state.notes[k];save('exegetical-notes',state.notes);noteCount();renderChapter();renderNotes(quote);}};}
@@ -364,9 +392,9 @@ function renderHighlightCards(list,passages){
   <h3>${esc(passage.label)}</h3>
   <div class="notebook-highlight-text" data-highlight-text aria-live="polite"><p class="muted">Loading verse text…</p></div>
   <div class="notebook-highlight-notes" data-highlight-notes></div>
-  <div class="button-row">
-   <button type="button" data-add-highlight-note>Add or edit note</button>
-   <button type="button" data-highlight-passage aria-label="Jump to ${esc(passage.label)}">Jump to passage ↗</button>
+  <div class="button-row highlight-card-actions">
+   <button type="button" data-add-highlight-note aria-label="Add or edit a note for ${esc(passage.label)}">Note</button>
+   <button type="button" data-highlight-passage aria-label="Jump to ${esc(passage.label)}">Read ↗</button>
   </div>
   <div data-note-editor hidden></div>
  </article>`).join('');
@@ -417,7 +445,7 @@ function renderHighlightCards(list,passages){
      return;
     }
     const t=data.translation;
-    text.innerHTML=`<div dir="${t.textDirection==='rtl'?'rtl':'ltr'}">${verses.map(v=>`<p><sup>${esc(v.number)}</sup> ${esc(flatten(v.content))}</p>`).join('')}</div>
+    text.innerHTML=`<div dir="${t.textDirection==='rtl'?'rtl':'ltr'}">${verses.map(v=>`<p><sup>${esc(v.number)}</sup> ${esc(inlineVerse(v.content))}</p>`).join('')}</div>
      ${verses.length<passage.last-passage.first+1?'<p class="muted">Some verse numbers differ in this translation.</p>':''}
      <p class="attribution">${esc(t.shortName||t.name||translation)} · <a href="${safeURL(t.licenseUrl||t.website)}" target="_blank" rel="noopener noreferrer">Source &amp; license</a>${t.licenseNotice?'<br>'+esc(flatten(t.licenseNotice)):''}</p>`;
     if(!reported.has(chapterKey)){reported.add(chapterKey);reportBibleView(data);}
