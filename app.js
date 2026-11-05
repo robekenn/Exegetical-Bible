@@ -174,6 +174,7 @@ function setupDesktopPanels(){
    const open=isOpen(panel);
    workspace.dataset[panel]=open?'open':'closed';
    const expanded=open&&!focused;
+   $(toggle.getAttribute('aria-controls')).inert=desktop.matches&&!expanded;
    const label=(expanded?'Close ':'Open ')+(panel==='books'?'Books':'Study');
    toggle.setAttribute('aria-expanded',String(expanded));
    toggle.setAttribute('aria-label',label);
@@ -181,6 +182,7 @@ function setupDesktopPanels(){
   }
  }
  function change(panel,open){
+  workspace.dataset.panelMotion='';
   choices[panel]=open;
   try{localStorage.setItem(key,JSON.stringify(choices));}catch{}
   if(open)setReaderFocus(false);
