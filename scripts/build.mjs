@@ -10,6 +10,7 @@ await import('./legal.mjs');
 await import('./feedback-pages.mjs');
 await mkdir('dist/changelog',{recursive:true});
 await copyFile('changelog/index.html','dist/changelog/index.html');
+await copyFile('changelog/theme.js','dist/changelog/theme.js');
 
 await mkdir('dist/admin',{recursive:true});
 await build({entryPoints:['telemetry.js'],outfile:'dist/vendor/telemetry.js',bundle:true,format:'esm',minify:true,platform:'browser',target:'es2022'});

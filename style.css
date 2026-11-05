@@ -352,7 +352,8 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 .changelog-header { margin-bottom: 32px; }
 .changelog-header h1 { margin: 24px 0 8px; font-family: var(--serif); }
 .changelog-header p { color: var(--muted); }
-.changelog-header a { color: var(--accent); }
+.changelog-topbar { justify-content: space-between; }
+.changelog-back { color: var(--accent); font-size: 13px; }
 .changelog-entry { padding: 24px 0; border-top: 1px solid var(--line); }
 .changelog-entry h2 { margin: 0 0 12px; font-size: 20px; }
 .changelog-entry ul { margin: 0; padding-inline-start: 22px; }

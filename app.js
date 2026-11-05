@@ -198,7 +198,16 @@ function setupDesktopPanels(){
  render();
 }
 
-$('theme').onclick=()=>{document.body.classList.toggle('dark');save('exegetical-dark',document.body.classList.contains('dark'));};if(stored('exegetical-dark',false))document.body.classList.add('dark');
+function applyReaderTheme(dark){
+ document.body.classList.toggle('dark',dark);
+ try{localStorage.setItem('exegetical-display-dark',JSON.stringify(dark));}catch{}
+}
+$('theme').onclick=()=>{
+ const dark=!document.body.classList.contains('dark');
+ applyReaderTheme(dark);
+ save('exegetical-dark',dark);
+};
+if(stored('exegetical-dark',false))document.body.classList.add('dark');
 document.documentElement.style.setProperty('--reading-size',stored('exegetical-size',20)+'px');
 $('settings').onclick=()=>{modal('Make yourself at home',`<p class="muted">Set a comfortable reading size.</p><label class="label" for="fontSize">Scripture text size</label><input id="fontSize" type="range" min="16" max="30" value="${stored('exegetical-size',20)}"><div class="button-row"><button id="themeSetting">Switch light / dark</button><button id="sharePassage">Copy passage link</button><a href="/feedback/">Feedback or bug report</a></div>`);$('fontSize').oninput=e=>{document.documentElement.style.setProperty('--reading-size',e.target.value+'px');save('exegetical-size',Number(e.target.value));};$('themeSetting').onclick=()=>$('theme').click();$('sharePassage').onclick=async()=>{try{await navigator.clipboard.writeText(location.href);toast('Passage link copied.');}catch{toast('Copy the link from your address bar.');}};};
 function chooseTranslation(mode='reader',onCompare){
@@ -612,7 +621,7 @@ async function start(){
  localRead:stored,localWrite:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}},
  applyFavorites:setFavorites,
  getPreferences:()=>({streak:streak.snapshot(),book:state.book,chapter:state.chapter,translation:state.translation,dark:document.body.classList.contains('dark'),size:Number(getComputedStyle(document.documentElement).getPropertyValue('--reading-size').replace('px',''))||20}),
- applyPreferences:async p=>{streak.merge(p.streak||{});if(typeof p.dark==='boolean')document.body.classList.toggle('dark',p.dark);if(p.size>=16&&p.size<=30)document.documentElement.style.setProperty('--reading-size',p.size+'px');if(state.translations.some(t=>t.id===p.translation)){state.translation=p.translation;await getBooks();if(state.books.some(b=>b.id===p.book)){state.book=p.book;state.chapter=Math.max(1,Math.min(Number(p.chapter)||1,book().numberOfChapters));}selectors();await loadChapter();}}
+ applyPreferences:async p=>{streak.merge(p.streak||{});if(typeof p.dark==='boolean')applyReaderTheme(p.dark);if(p.size>=16&&p.size<=30)document.documentElement.style.setProperty('--reading-size',p.size+'px');if(state.translations.some(t=>t.id===p.translation)){state.translation=p.translation;await getBooks();if(state.books.some(b=>b.id===p.book)){state.book=p.book;state.chapter=Math.max(1,Math.min(Number(p.chapter)||1,book().numberOfChapters));}selectors();await loadChapter();}}
  });
  if(account.config.esvEnabled&&!state.translations.some(t=>t.id==='ESV'))state.translations.unshift({id:'ESV',name:'English Standard Version',englishName:'English Standard Version',shortName:'ESV',language:'eng',languageEnglishName:'English'});
  createCommunity({account,state,esc,modal,toast,openVerse:async v=>{if(state.translations.some(t=>t.id===v.translation)){state.translation=v.translation;await getBooks();}if(state.books.some(b=>b.id===v.book))navigate(v.book,Math.min(Number(v.chapter),state.books.find(b=>b.id===v.book).numberOfChapters),Number(v.verse));else toast('This book is not available in the selected translation.');}});
