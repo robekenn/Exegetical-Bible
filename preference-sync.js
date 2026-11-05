@@ -1,3 +1,19 @@
+export const favoriteStorageKey='exegetical-favorite-translations';
+
+export function favoriteIds(value){
+ return Array.isArray(value)?[...new Set(value.filter(id=>typeof id==='string'&&/^[A-Za-z0-9_-]{1,100}$/.test(id)))]:[];
+}
+
+export function applyFavoriteChanges(saved,changes){
+ const ids=new Set(favoriteIds(saved));
+ for(const [id,selected] of Object.entries(changes||{})){
+  if(!favoriteIds([id]).length)continue;
+  if(selected===true)ids.add(id);
+  else if(selected===false)ids.delete(id);
+ }
+ return [...ids];
+}
+
 // Serialize settings writes, retaining the newest pending snapshot through failures.
 export function createPreferenceSync({send,persist,onChange=()=>{},isCurrent=()=>true,initial=null,delay=800}){
  let pending=initial,running=false,error='',timer;
