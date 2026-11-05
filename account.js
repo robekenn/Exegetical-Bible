@@ -1,12 +1,12 @@
 import {googleProviderAvailable,signInWithGoogle} from './google-auth.js';
-import {createPreferenceSync,savingStatus} from './preference-sync.js';
+import {createPreferenceSync,savingStatus,favoriteIds,applyFavoriteChanges,favoriteStorageKey} from './preference-sync.js';
 import {accountMenu} from './account-menu.js';
 import {clearAccountCache} from './security-model.js';
 import {revealAdminButton} from './account-access.js';
 import {persistentCookieOptions} from './session-options.js';
 import {createBrowserClient,parseCookieHeader,serializeCookieHeader} from '/vendor/supabase.js';
 import {payloadFor,recordsToState,validatePayload,mergeRemoteStudy} from './sync-model.js';
-export async function createAccount({state,esc,modal,toast,refresh,applyPreferences,getPreferences,localRead,localWrite}){
+export async function createAccount({state,esc,modal,toast,refresh,applyPreferences,getPreferences,localRead,localWrite,applyFavorites=()=>{}}){
  const $=id=>document.getElementById(id);
  const callbackFailed=location.pathname==='/auth/callback'&&(new URLSearchParams(location.hash.slice(1)).has('error')||new URLSearchParams(location.search).has('error'));
  let config;try{config=await fetch('/api/config').then(r=>r.json());}catch{config={};}
@@ -15,6 +15,9 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
  let user=null,ready=false,epoch=0,running=false,prefTimer,refreshing=false;
  const dirty=new Map(),revisions=new Map(),conflicts=new Set();let syncError='',preferenceSync=null;
  const device={notes:localRead('exegetical-notes',{}),highlights:localRead('exegetical-highlights',{})};
+ let favoritesReady=false,favoriteRevision=0;
+ let accountFavorites=[];
+ const migratedFavoritesKey=favoriteStorageKey+'-migrated';
  const prefix=()=>user?'exegetical-user-'+user.id:'exegetical';
  function indicator(text){$('accountStatus').textContent=text;if($('saveStatus'))$('saveStatus').textContent=user?text:'Saved on this device.';}
  function cache(){if(!user)return;localWrite(prefix()+'-notes',state.notes);localWrite(prefix()+'-highlights',state.highlights);localWrite(prefix()+'-pending',Object.fromEntries(dirty));}
@@ -24,9 +27,48 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
  async function push(){if(!user||!ready||running||!dirty.size)return;running=true;const runEpoch=epoch;const owner=user.id;syncError='';try{for(const [k,payload]of dirty){if(conflicts.has(k))continue;const {data,error}=await client.rpc('save_study_entry',{p_passage:k,p_payload:payload,p_revision:revisions.get(k)||0});if(runEpoch!==epoch||owner!==user?.id)return;if(error){if(error.code==='40001'){conflicts.add(k);continue;}throw error;}revisions.set(k,Number(data[0].revision));if(dirty.get(k)===payload)dirty.delete(k);cache();} }catch(e){syncError=e.message;toast('Your changes are safe on this device, but have not synced. Open My account to retry.');}finally{running=false;display();if(runEpoch===epoch&&dirty.size&&!syncError&&[...dirty.keys()].some(k=>!conflicts.has(k)))setTimeout(push,250);}}
  function changed(){if(!ready&&user){toast('Wait for your account to load before editing.');return;}if(!user){device.notes=state.notes;device.highlights=state.highlights;return;}const now=currentPayloads();const previous=lastSnapshot;for(const k of new Set([...now.keys(),...previous.keys()])){const next=now.get(k)||payloadFor(k,{},{});if(JSON.stringify(now.get(k))!==JSON.stringify(previous.get(k)))dirty.set(k,next);}lastSnapshot=now;cache();display();clearTimeout(changeTimer);changeTimer=setTimeout(push,600);}
  let lastSnapshot=new Map(),changeTimer;
- async function loadCloud(session,force=false){const next=session?.user||null;if(!force&&next?.id===user?.id&&ready)return;if(!next&&!user&&ready)return;const id=++epoch;clearTimeout(changeTimer);clearTimeout(prefTimer);preferenceSync?.dispose();preferenceSync=null;user=next;document.dispatchEvent(new CustomEvent('study-auth-changed',{detail:{id:user?.id||null}}));ready=false;dirty.clear();revisions.clear();conflicts.clear();syncError='';
- if(!user){state.notes=localRead('exegetical-notes',{});state.highlights=localRead('exegetical-highlights',{});ready=true;refresh();display();return;}
- const settingsKey=prefix()+'-pending-preferences';preferenceSync=createPreferenceSync({initial:localRead(settingsKey,null),persist:value=>localWrite(settingsKey,value),isCurrent:()=>id===epoch&&Boolean(user),onChange:display,send:settings=>client.from('study_preferences').upsert({user_id:next.id,settings})});
+ function showFavorites(ids){
+  accountFavorites=favoriteIds(ids);
+  if(user)localWrite(prefix()+'-favorite-translations',accountFavorites);
+  applyFavorites(accountFavorites);
+ }
+ function readPreferences(owner){
+  return client.from('study_preferences').select('settings').eq('user_id',owner).maybeSingle();
+ }
+ function queuePreferences(favoriteChanges={}){
+  if(!user||!ready||!favoritesReady)return;
+  const changes={...preferenceSync.pending?.favoriteChanges,...favoriteChanges};
+  preferenceSync.queue({...getPreferences(),favoriteChanges:changes});
+ }
+ function changeFavorite(id,selected){
+  if(!user||!favoritesReady){
+   toast('Wait for your account to load before changing favorites.');
+   return false;
+  }
+  favoriteRevision++;
+  const changes={[id]:selected};
+  showFavorites(applyFavoriteChanges(accountFavorites,changes));
+  queuePreferences(changes);
+  return true;
+ }
+ async function loadCloud(session,force=false){const next=session?.user||null;if(!force&&next?.id===user?.id&&ready)return;if(!next&&!user&&ready)return;const id=++epoch;clearTimeout(changeTimer);clearTimeout(prefTimer);preferenceSync?.dispose();preferenceSync=null;user=next;document.dispatchEvent(new CustomEvent('study-auth-changed',{detail:{id:user?.id||null}}));ready=false;favoritesReady=false;dirty.clear();revisions.clear();conflicts.clear();syncError='';
+ if(!user){showFavorites(localRead(favoriteStorageKey,[]));state.notes=localRead('exegetical-notes',{});state.highlights=localRead('exegetical-highlights',{});ready=true;refresh();display();return;}
+ const settingsKey=prefix()+'-pending-preferences';
+ preferenceSync=createPreferenceSync({
+  initial:localRead(settingsKey,null),
+  persist:value=>localWrite(settingsKey,value),
+  isCurrent:()=>id===epoch&&Boolean(user),
+  onChange:display,
+  async send({favoriteChanges,...settings}){
+   // Reading activity on another device must not overwrite newer favorites.
+   const {data,error}=await readPreferences(next.id);
+   if(error)return {error};
+   if(id!==epoch)return {};
+   settings.favoriteTranslations=applyFavoriteChanges(data?.settings?.favoriteTranslations,favoriteChanges);
+   return client.from('study_preferences').upsert({user_id:next.id,settings});
+  }
+ });
+ showFavorites(localRead(prefix()+'-favorite-translations',[]));
  state.notes=localRead(prefix()+'-notes',{});state.highlights=localRead(prefix()+'-highlights',{});refresh();display();
  try{const pending=localRead(prefix()+'-pending',{});for(const [k,p]of Object.entries(pending))if(validatePayload(k,p))dirty.set(k,p);
  const rows=[];for(let offset=0;;offset+=1000){const {data,error}=await client.from('study_entries').select('*').eq('user_id',user.id).order('passage').range(offset,offset+999);if(error)throw error;rows.push(...data);if(data.length<1000)break;}
@@ -34,11 +76,25 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
  // Pending edits retain their original base revision across reloads, so stale edits conflict safely.
  const savedRevs=localRead(prefix()+'-revisions',{});for(const [k,p]of dirty){revisions.set(k,Number(savedRevs[k]||0));if(p.text)cloud.notes[k]=p;else delete cloud.notes[k];if(p.highlighted)cloud.highlights[k]=true;else delete cloud.highlights[k];}
  state.notes=cloud.notes;state.highlights=cloud.highlights;lastSnapshot=currentPayloads();ready=true;cache();refresh();display();
- const {data:prefs,error}=await client.from('study_preferences').select('settings').eq('user_id',user.id).maybeSingle();if(id!==epoch)return;if(error)throw error;if(preferenceSync.pending)await applyPreferences(preferenceSync.pending);else if(prefs)await applyPreferences(prefs.settings);preferencesChanged();push();
+ const {data:prefs,error}=await readPreferences(next.id);
+ if(id!==epoch)return;
+ if(error)throw error;
+ const saved=prefs?.settings||{};
+ const pendingPreferences=preferenceSync.pending;
+ const legacy=localRead(migratedFavoritesKey,false)?[]:favoriteIds(localRead(favoriteStorageKey,[]));
+ const migration=Object.fromEntries(legacy.map(id=>[id,true]));
+ const changes={...migration,...pendingPreferences?.favoriteChanges};
+ showFavorites(applyFavoriteChanges(saved.favoriteTranslations,changes));
+ if(pendingPreferences||prefs)await applyPreferences(pendingPreferences||saved);
+ if(id!==epoch)return;
+ favoritesReady=true;
+ queuePreferences(changes);
+ if(legacy.length)localWrite(migratedFavoritesKey,true);
+ push();
  }catch(e){if(id!==epoch)return;syncError=e.message;toast('Could not load your account. Your saved device copy is available; open My account to retry.');display();refresh();}}
  function rememberRevisions(){if(user)localWrite(prefix()+'-revisions',Object.fromEntries(revisions));}
  function mutate(){rememberRevisions();changed();}
- function preferencesChanged(){if(!user||!ready)return;preferenceSync?.queue(getPreferences());}
+ function preferencesChanged(){queuePreferences();}
 
  async function signOut(){if(dirty.size||syncError||preferenceSync?.pending||preferenceSync?.error){toast('Some changes are not synced. Export a backup or resolve them before signing out.');return;}const owner=user?.id;const {error}=await client.auth.signOut({scope:'local'});if(error){toast(error.message);return;}try{clearAccountCache(localStorage,owner);}catch{}$('modal').close();await loadCloud(null);toast('Signed out. Your account’s saved device copy was cleared.');}
  function authForm(mode='login'){if(!client){modal('Accounts unavailable','<p class="muted">Account storage is not configured. You can keep studying and saving device notes.</p>');return;}modal(mode==='signup'?'Create your study account':'Welcome back',`<p class="muted">Save notes, highlights, and reading preferences to your private account.</p><form id="googleAuthForm" class="google-auth-form"><label class="check-label"><input id="googleConsent" type="checkbox" required> I am at least 16, agree to the <a href="/terms/" target="_blank" rel="noopener">Terms</a>, and have read the <a href="/privacy/" target="_blank" rel="noopener">Privacy notice</a>.</label><button id="googleSignIn" class="google-signin" ${googleEnabled?'':'disabled'} type="submit"><span aria-hidden="true" class="google-g">G</span> Continue with Google</button><p id="googleAuthMessage" class="muted" role="status">${googleEnabled?'Your Google picture will be used unless you choose another.':'Google sign-in is awaiting provider setup. Email sign-in is available below.'}</p></form><div class="auth-divider"><span>or use email</span></div><form id="authForm"><label class="label" for="authEmail">Email</label><input id="authEmail" class="full-input" type="email" autocomplete="email" required><label class="label" for="authPassword">Password</label><input id="authPassword" class="full-input" type="password" minlength="${mode==='signup'?12:8}" autocomplete="${mode==='signup'?'new-password':'current-password'}" required>${mode==='signup'?'<label class="check-label"><input id="termsConsent" type="checkbox" required> I am at least 16 and agree to the <a href="/terms/" target="_blank" rel="noopener">Terms</a> and have read the <a href="/privacy/" target="_blank" rel="noopener">Privacy notice</a>.</label>':''}<p id="authMessage" role="status" class="muted"></p><button class="primary" id="authSubmit" type="submit">${mode==='signup'?'Create account':'Sign in'}</button></form><div class="button-row"><button id="switchAuth">${mode==='signup'?'Already have an account? Sign in':'New here? Create an account'}</button><button id="forgotPassword">Forgot password?</button></div>`);$('googleAuthForm').onsubmit=async e=>{e.preventDefault();if(!googleEnabled)return;if(!$('googleAuthForm').reportValidity())return;const button=$('googleSignIn'),message=$('googleAuthMessage');button.disabled=true;message.textContent='Opening Google…';try{sessionStorage.setItem('exegetical-google-consent',String(Date.now()));const {error}=await signInWithGoogle(client,location.origin);if(error)throw error;}catch(e){sessionStorage.removeItem('exegetical-google-consent');if(message.isConnected){message.textContent=e.message||'Google sign-in could not start. Try again.';button.disabled=false;}}};$('switchAuth').onclick=()=>authForm(mode==='signup'?'login':'signup');$('forgotPassword').onclick=resetPassword;$('authForm').onsubmit=async e=>{e.preventDefault();$('authSubmit').disabled=true;const email=$('authEmail').value.trim(),password=$('authPassword').value;const result=mode==='signup'?await client.auth.signUp({email,password,options:{emailRedirectTo:location.origin+'/auth/callback',data:{terms_version:'2026-11-02',terms_accepted_at:new Date().toISOString()}}}):await client.auth.signInWithPassword({email,password});if(result.error){if($('authMessage'))$('authMessage').textContent=result.error.message;if($('authSubmit'))$('authSubmit').disabled=false;return;}if(result.data.session){$('modal').close();await loadCloud(result.data.session);toast('Signed in. Your study space is ready.');}else{$('authMessage').textContent='Check your email to confirm your account, then sign in here.';$('authSubmit').disabled=false;}};}
@@ -51,9 +107,21 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
  window.addEventListener('online',push);async function pull(){
  if(refreshing||!user||!ready||dirty.size||document.visibilityState!=='visible')return;
  refreshing=true;const id=epoch,owner=user.id;
- try{const {data:rows,error}=await client.from('study_entries').select('*').eq('user_id',owner).order('passage');if(error||id!==epoch)return;const updated=mergeRemoteStudy(rows,{notes:state.notes,highlights:state.highlights,revisions,pending:dirty,editingKey:document.activeElement?.id==='noteText'?`${state.book}.${state.chapter}.${state.verse}`:null});
- if(updated){lastSnapshot=currentPayloads();rememberRevisions();cache();refresh({background:true});}
+ const revision=favoriteRevision;
+ try{
+  const [entries,preferences]=await Promise.all([
+   client.from('study_entries').select('*').eq('user_id',owner).order('passage'),
+   favoritesReady&&!preferenceSync?.pending?readPreferences(owner):null
+  ]);
+  if(id!==epoch)return;
+  if(preferences&&!preferences.error&&revision===favoriteRevision&&!preferenceSync?.pending){
+   const ids=favoriteIds(preferences.data?.settings?.favoriteTranslations);
+   if(JSON.stringify(ids)!==JSON.stringify(accountFavorites))showFavorites(ids);
+  }
+  if(entries.error)return;
+  const updated=mergeRemoteStudy(entries.data,{notes:state.notes,highlights:state.highlights,revisions,pending:dirty,editingKey:document.activeElement?.id==='noteText'?`${state.book}.${state.chapter}.${state.verse}`:null});
+  if(updated){lastSnapshot=currentPayloads();rememberRevisions();cache();refresh({background:true});}
  }finally{refreshing=false;}
  }window.addEventListener('online',()=>{push();preferenceSync?.flush();display();});window.addEventListener('offline',display);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){push();preferenceSync?.flush();pull();}});setInterval(pull,30000);window.addEventListener('beforeunload',e=>{if(dirty.size||preferenceSync?.pending){e.preventDefault();e.returnValue='';}});
- return {changed:mutate,preferencesChanged,getUser:()=>user,getClient:()=>client,signIn:authForm,isUser:()=>Boolean(user),canEdit:()=>!user||ready,config,status:()=>saveState().text,cacheKey:k=>user?prefix()+'-'+k:k};
+ return {changed:mutate,preferencesChanged,changeFavorite,getUser:()=>user,getClient:()=>client,signIn:authForm,isUser:()=>Boolean(user),canEdit:()=>!user||ready,config,status:()=>saveState().text,cacheKey:k=>user?prefix()+'-'+k:k};
 }
