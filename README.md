@@ -39,6 +39,12 @@ Supabase email/password accounts support sign-up, confirmation, login, password 
 
 The initial schema was applied in a transaction and owner-only reads/writes plus anonymous access denial were verified with rolled-back fixtures. Normal deployment builds only bundle static assets; they do not migrate the database or create test users. `npm run db:migrate` is an explicit maintenance operation, separate from deployment. The verification helper scripts are intended for a separate test project and are not run automatically against production.
 
+### Security hardening rollout
+
+Apply `db/security-hardening.sql` to Supabase **after** the existing social, admin, and moderation migrations and **before** releasing the corresponding application changes. It is repeatable. It dismisses malformed legacy appeals while keeping the submission text, validates message attribution, restricts the private block helper, and installs the shared Bible provider budget. Run `tests/sql/security-hardening.sql` only against an isolated database with those migrations applied.
+
+The Bible proxy uses the existing server-side Supabase credentials for atomic provider budgets. Open translations remain available if that service is down. `ESV_DAILY_BUDGET` can lower the default of 2,400 calls per UTC day, and `API_BIBLE_DAILY_BUDGET` can lower its default of 4,000. Set the latter to fit the project’s API.Bible plan and usage elsewhere. Each paid provider also has shared minute and hour limits and a per-client burst limit. No client IP is stored in plaintext.
+
 ## Required configuration
 Connect Supabase using the Vercel Marketplace. Explicit database migration uses `POSTGRES_URL_NON_POOLING` (or `POSTGRES_URL`) with Supabase’s published CA certificate and full TLS validation. The browser uses `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (or the equivalent Supabase variables), returned by `/api/config`.
 

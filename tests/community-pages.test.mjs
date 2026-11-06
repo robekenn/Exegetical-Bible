@@ -8,3 +8,29 @@ test('community pages preserve actions, mark privacy navigation correctly and re
  await c.open('messages');await new Promise(r=>setImmediate(r));assert.match(document.getElementById('communityContent').textContent,/Your conversations start here/);
  await c.open('profile');assert.equal(document.getElementById('profileForm').querySelectorAll('.community-card').length,4);assert.equal(document.getElementById('username').placeholder,'Choose a username');dom.window.close();
 });
+
+test('a deletion confirmation cannot submit after the authenticated session changes',async()=>{
+ const dom=new JSDOM('<button id="communityButton"></button><dialog id="modal"></dialog><div id="modalBody"></div>',{url:'https://example.test/'});
+ const original=global.fetch;
+ let owner={id:'first-account',email:'first@example.test'},resolveSession,requests=0;
+ Object.assign(globalThis,{document:dom.window.document,location:dom.window.location});
+ const query=()=>({select(){return this;},eq(){return this;},order(){return this;},maybeSingle:async()=>({data:null}),then(resolve){return Promise.resolve({data:[]}).then(resolve);}});
+ const client={from:query,rpc:async()=>({data:[]}),auth:{getSession:()=>new Promise(resolve=>{resolveSession=resolve;})}};
+ try{
+  global.fetch=async()=>{requests++;throw Error('Deletion must not be sent');};
+  const community=createCommunity({account:{getUser:()=>owner,getClient:()=>client},state:{},esc:String,toast(){},modal(title,html){
+   document.getElementById('modal').open=true;
+   document.getElementById('modalBody').innerHTML=html;
+  }});
+  await community.open('privacy');
+  document.getElementById('deleteAccount').click();
+  assert.match(document.getElementById('modalBody').textContent,/first@example.test/);
+  document.getElementById('deleteConfirmation').value='DELETE';
+  const submitted=document.getElementById('deleteAccountForm').onsubmit({preventDefault(){}});
+  owner={id:'second-account',email:'second@example.test'};
+  resolveSession({data:{session:{user:owner,access_token:'second-token'}}});
+  await submitted;
+  assert.equal(requests,0);
+  assert.match(document.getElementById('deletionStatus').textContent,/Account or confirmation changed/);
+ }finally{global.fetch=original;dom.window.close();}
+});
