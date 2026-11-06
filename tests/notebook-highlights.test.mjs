@@ -40,17 +40,31 @@ test('notebook groups consecutive saved highlights and opens the first verse', a
   card.querySelector('[data-add-highlight-note]').click();
   const editor=card.querySelector('form');
   editor.elements.text.value='Note from the highlight card';
-  editor.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
+  editor.elements.text.dispatchEvent(new dom.window.Event('input'));
+  document.getElementById('closeModal').click();
+  document.getElementById('notebookNav').click();
+  const reopened=document.querySelector('[data-highlight-card]');
+  reopened.querySelector('[data-add-highlight-note]').click();
+  const restored=reopened.querySelector('form');
+  assert.equal(restored.elements.text.value,'Note from the highlight card');
+  restored.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
   assert.equal(vm.runInContext("state.notes['JHN.3.16-18'].text",context),'Note from the highlight card');
   assert.match(card.querySelector('[data-highlight-notes]').textContent,/Personal note/);
-  assert.match(card.querySelector('[data-highlight-notes]').textContent,/Note from the highlight card/);
+  assert.match(reopened.querySelector('[data-highlight-notes]').textContent,/Note from the highlight card/);
+  document.querySelector('[data-notebook-view="notes"]').click();
   const search=document.getElementById('noteSearch');
+  for(const query of ['John 3:16-18','John 3:16–18','John 3:16 — 18']){
+   search.value=query;
+   search.dispatchEvent(new dom.window.Event('input'));
+   assert.match(document.getElementById('noteList').textContent,/Note from the highlight card/);
+  }
+  document.querySelector('[data-notebook-view="highlights"]').click();
   search.value='John 3:16-18';
   search.dispatchEvent(new dom.window.Event('input'));
   await new Promise(resolve=>setTimeout(resolve,250));
   assert.deepEqual(labels(),['John 3:16–18']);
   document.querySelector('[data-highlight-passage]').click();
-  assert.equal(vm.runInContext('opened',context),'JHN.3.16');
+  assert.equal(vm.runInContext('opened',context),'JHN.3.16.18');
   assert.equal(modal.open,false);
  }finally{dom.window.close();}
 });
