@@ -45,3 +45,26 @@ test('desktop passage picker uses themed book and chapter controls with a curren
  assert.equal(document.querySelector('[data-mobile-chapter="2"]').getAttribute('aria-current'),'true');
  document.querySelector('[data-mobile-chapter="3"]').click();assert.deepEqual(navigated,['JHN',3]);assert.equal(document.getElementById('mobilePassageButton').classList.contains('mobile-only'),false);dom.window.close();
 });
+
+test('closing Study for navigation unlocks the reader before the verse jump',async()=>{
+ const {setupForegroundScroll}=await import('../foreground-scroll.js');
+ const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
+ const dom=new JSDOM(html,{url:'https://example.test/'}),w=dom.window,d=w.document;
+ Object.assign(globalThis,{window:w,document:d,MutationObserver:w.MutationObserver,CustomEvent:w.CustomEvent,matchMedia:()=>({matches:true,addEventListener(){}})});
+ const controller=setupForegroundScroll(d,w);
+ const jumps=[];
+ Object.defineProperty(w,'scrollY',{value:240});
+ w.scrollTo=(x,y)=>jumps.push(y);
+ try{
+  setupMobile({state:{books:[]},modal(){},esc:String,navigate(){},toast(){},refreshForeground:controller.refresh});
+  d.getElementById('mobileStudyButton').click();
+  await Promise.resolve(); // Allow the overlay observer to lock the reader.
+  assert.equal(d.body.style.position,'fixed');
+  d.dispatchEvent(new w.Event('close-mobile-study'));
+  assert.equal(d.body.style.position,'');
+  assert.equal(d.getElementById('reader').inert,false);
+  w.scrollTo(0,1200);
+  await Promise.resolve();
+  assert.deepEqual(jumps,[240,1200]);
+ }finally{controller.destroy();dom.window.close();}
+});
