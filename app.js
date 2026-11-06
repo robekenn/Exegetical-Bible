@@ -93,7 +93,7 @@ function renderBooks(){bookNavigation?.render();}
 function selectors(){ $('bookSelect').innerHTML=state.books.map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');$('bookSelect').value=state.book;const b=book();$('chapterSelect').innerHTML=Array.from({length:b?.numberOfChapters||1},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');$('chapterSelect').value=state.chapter;renderBooks();}
 async function getBooks(){const d=await api(`${state.translation}/books.json`);state.books=d.books;if(!book())state.book=state.books[0].id;state.chapter=Math.max(1,Math.min(state.chapter,book().numberOfChapters));selectors();}
 function position(){save('exegetical-position',{book:state.book,chapter:state.chapter,translation:state.translation});const u=new URL(location.href);u.searchParams.set('book',state.book);u.searchParams.set('chapter',state.chapter);const [first,last]=activeRange();u.searchParams.set('verse',first);if(last>first)u.searchParams.set('endVerse',last);else u.searchParams.delete('endVerse');u.searchParams.set('translation',state.translation);history.replaceState(null,'',u);}
-async function navigate(b,c,verse,end=verse){state.book=b;state.chapter=c;state.verse=verse??1;selectors();await loadChapter(verse===undefined?null:[verse,end],null,false,verse!==undefined);}
+async function navigate(b,c,verse,end=verse,prepared=null){state.book=b;state.chapter=c;state.verse=verse??1;selectors();await loadChapter(verse===undefined?null:[verse,end],prepared,false,verse!==undefined);}
 async function loadChapter(range=null,prepared=null,cleared=false,reveal=false){selectedRange=null;selectionCleared=cleared;resetVerseTap();state.data=null;$('passageHighlights').hidden=true;const id=++loadId;++studyId;$('chapterText').setAttribute('aria-busy','true');$('chapterText').innerHTML='<div class="passage-skeleton" role="status" aria-label="Loading passage"><span class="sr-only">Opening the passage…</span>'+Array.from({length:9},()=>'<div class="skeleton-line" aria-hidden="true"></div>').join('')+'</div>';$('studyBody').innerHTML='<p class="loading">Loading study resources…</p>';$('chapterTitle').innerHTML=`${esc(book()?.name||state.book)} <span>${state.chapter}</span>`;$('bookSubtitle').textContent=['MAT','MRK','LUK','JHN'].includes(state.book)?'THE GOSPEL ACCORDING TO':'THE BOOK OF';$('previous').disabled=true;$('next').disabled=true;try{const d=prepared||await api(`${state.translation}/${state.book}/${state.chapter}.json`);if(id!==loadId)return;state.data=d;if(!verses().some(v=>v.number===state.verse))state.verse=verses().find(v=>Array.isArray(range)&&inRange(v.number,range))?.number||verses()[0]?.number||1;if(Array.isArray(range)&&range[0]<range[1]&&inRange(state.verse,range))selectedRange=range;const t=d.translation;$('translationName').textContent=t.englishName||t.name;$('translationButton').textContent=(t.shortName||t.id)+' ▾';$('chapterText').dir=t.textDirection||'ltr';$('translationCredit').innerHTML=`${esc(t.name)} · <a href="${safeURL(t.licenseUrl||t.website)}" target="_blank" rel="noopener noreferrer">Translation source & license ↗</a>${t.licenseNotice?'<br>'+esc(flatten(t.licenseNotice)):''}`;$('chapterPosition').textContent=`Chapter ${state.chapter} of ${book().numberOfChapters}`;const idx=state.books.indexOf(book());$('previous').disabled=idx===0&&state.chapter===1;$('next').disabled=idx===state.books.length-1&&state.chapter===book().numberOfChapters;renderChapter();reportBibleView(d);position();renderStudy();if(reveal)revealPassage(range);}catch(e){if(id!==loadId)return;state.data=null;showError($('chapterText'),e,()=>loadChapter(range,null,cleared,reveal));$('studyBody').textContent='Open a passage to begin studying.';}finally{if(id===loadId)$('chapterText').removeAttribute('aria-busy');}}
 function revealPassage(range,notify=true){
  const available=verses().filter(v=>inRange(v.number,range));
@@ -282,12 +282,141 @@ function comparisonReference(from,to,bookId,chapter,first,last){
  }
  return {chapter,first,last,verified:false};
 }
+let relatedOrigin;
+const relatedBack=$('relatedBack');
+function closeStudyForRelatedJump(){
+ if(document.body.classList.contains('mobile-study-open'))$('mobileCloseStudy').click();
+}
+function focusReadingVerse(){
+ $('chapterText').querySelector('[data-verse="'+state.verse+'"]')?.focus({preventScroll:true});
+}
+if(relatedBack)relatedBack.onclick=async()=>{
+ const origin=relatedOrigin;
+ if(!origin)return;
+ relatedOrigin=null;
+ relatedBack.hidden=true;
+ closeStudyForRelatedJump();
+ state.translation=origin.translation;
+ state.books=origin.books;
+ await navigate(origin.book,origin.chapter,...origin.range);
+ if(state.data&&state.book===origin.book&&state.chapter===origin.chapter)focusReadingVerse();
+};
+
+function relatedTargets(data,passage){
+ const hasNumberedTitle=state.translation==='fra_lsg'&&state.book==='PSA'&&state.chapter===51;
+ const sources=new Set(passage.filter(v=>!hasNumberedTitle||v.number>=3)
+  .map(v=>comparisonReference(state.translation,'ESV',state.book,state.chapter,v.number,v.number).first));
+ const targets=new Map();
+ for(const entry of data.chapter.content){
+  if(!sources.has(entry.verse)||!Array.isArray(entry.references))continue;
+  for(const reference of entry.references){
+   if(!reference)continue;
+   const {book,chapter,verse,endVerse=verse,score}=reference;
+   if(!/^[A-Z0-9]{3}$/.test(book)||![chapter,verse,endVerse].every(n=>Number.isInteger(n)&&n>=1&&n<=999)||endVerse<verse)continue;
+   if(book===state.book&&chapter===state.chapter&&[...sources].some(n=>n>=verse&&n<=endVerse))continue;
+   const key=noteKey(book,chapter,verse,endVerse),rank=Number.isFinite(score)?score:0;
+   if(!targets.has(key)||rank>targets.get(key).rank)targets.set(key,{book,chapter,verse,endVerse,rank});
+  }
+ }
+ return [...targets.values()].sort((a,b)=>b.rank-a.rank);
+}
+
+async function renderRelated(root,quote,passage,id){
+ let data;
+ try{data=await api(`d/open-cross-ref/${state.book}/${state.chapter}.json`);}
+ catch(error){
+  if(error.status!==404)throw error;
+ }
+ if(id!==studyId)return;
+ const targets=data?relatedTargets(data,passage):[];
+ const currentEdition=state.translation;
+ const currentBooks=state.books;
+ let fallbackBooks;
+ if(currentEdition!=='BSB'&&targets.some(target=>!currentBooks.some(b=>b.id===target.book))){
+  try{fallbackBooks=(await api('BSB/books.json')).books;}catch{}
+  if(id!==studyId)return;
+ }
+ const bookName=(books,id)=>books.find(b=>b.id===id)?.name||id;
+ root.innerHTML=quote+`<section class="related-passages" aria-label="Related passages">
+  <h3>Related passages</h3>
+  <p class="muted">Open a reference to preview it here. Verse numbering may vary by translation.</p>
+  <div id="relatedList"></div>
+  <button type="button" id="relatedMore" hidden>Show more references</button>
+  <p class="attribution">Cross-references from <a href="https://www.openbible.info/labs/cross-references/" target="_blank" rel="noopener noreferrer">OpenBible.info</a> via AO Lab, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>. Results are filtered for your selection and ranked by source score.</p>
+ </section>`;
+ const list=$('relatedList'),more=$('relatedMore');
+ if(!targets.length){list.innerHTML='<p>No cross-references are available for this selection.</p>';return;}
+ let shown=0;
+ function showMore(){
+  const start=shown;
+  for(const target of targets.slice(start,start+8)){
+   const {book,chapter,verse,endVerse}=target;
+   const row=document.createElement('details');
+   row.className='related-reference';
+   row.innerHTML=`<summary>${esc(bookName(currentBooks.some(b=>b.id===book)?currentBooks:fallbackBooks||currentBooks,book))} ${chapter}:${comparisonRangeLabel(verse,endVerse)}</summary><div class="related-preview" aria-live="polite"></div>`;
+   list.append(row);
+   const preview=row.querySelector('.related-preview');
+   let loading=false,loaded=false;
+   async function lookup(edition,books){
+    if(!books.some(b=>b.id===book&&b.numberOfChapters>=chapter))return;
+    const match=comparisonReference('ESV',edition,book,chapter,verse,endVerse);
+    try{
+     const chapterData=await api(`${edition}/${book}/${chapter}.json`);
+     const matches=chapterData.chapter.content.filter(v=>v.type==='verse'&&inRange(v.number,[match.first,match.last]));
+     if(matches.length)return {chapterData,matches,edition,books,range:[match.first,match.last]};
+    }catch(error){if(error.status!==404)throw error;}
+   }
+   async function load(){
+    if(loading||loaded)return;
+    loading=true;
+    preview.textContent='Loading passage…';
+    try{
+     let result=await lookup(currentEdition,currentBooks);
+     if(!result&&currentEdition!=='BSB'){
+      fallbackBooks??=(await api('BSB/books.json')).books;
+      result=await lookup('BSB',fallbackBooks);
+     }
+     if(id!==studyId)return;
+     loaded=true;
+     if(!result){preview.textContent='This passage is unavailable to preview.';return;}
+     const {chapterData,matches,edition,books,range}=result;
+     const translation=chapterData.translation;
+     preview.innerHTML=`<p class="source-label">${esc(bookName(books,book))} ${chapter}:${esc(comparisonVerseLabel(matches))} · ${esc(translation.shortName||edition)}</p>
+      ${edition!==currentEdition?'<p class="muted">Unavailable in your current translation. Showing BSB.</p>':''}
+      <blockquote class="quote" dir="${translation.textDirection==='rtl'?'rtl':'ltr'}">${esc(passageText(matches))}</blockquote>
+      <p class="attribution">${translation.licenseNotice?esc(flatten(translation.licenseNotice))+' · ':''}<a href="${safeURL(translation.licenseUrl||translation.website)}" target="_blank" rel="noopener noreferrer">Translation source &amp; license ↗</a></p>
+      <button type="button" class="primary">Open in reader</button>`;
+     preview.querySelector('button').onclick=async()=>{
+      if(id!==studyId)return;
+      relatedOrigin??={book:state.book,chapter:state.chapter,range:activeRange(),translation:state.translation,books:state.books};
+      relatedBack.hidden=false;
+      closeStudyForRelatedJump();
+      state.translation=edition;
+      state.books=books;
+      await navigate(book,chapter,...range,chapterData);
+      if(state.data&&state.book===book&&state.chapter===chapter)focusReadingVerse();
+     };
+     reportBibleView(chapterData);
+    }catch(error){if(id===studyId)showError(preview,error,load);}
+    finally{loading=false;}
+   }
+   row.ontoggle=()=>{if(row.open)load();};
+  }
+  shown=list.children.length;
+  more.hidden=shown>=targets.length;
+  if(start)list.children[start]?.querySelector('summary').focus();
+ }
+ more.onclick=showMore;
+ showMore();
+}
+
 async function renderStudy(){const id=++studyId;++wordId;const root=$('studyBody');$('studyRef').textContent=passageLabel();const passage=verses().filter(v=>inRange(v.number));if(!passage.length)return;
  const picker=passage.length>1&&state.tab==='language'?`<label class="label" for="studyFocusVerse">ORIGINAL LANGUAGE FOR</label><select id="studyFocusVerse">${passage.map(v=>`<option value="${v.number}" ${v.number===state.verse?'selected':''}>Verse ${v.number}</option>`).join('')}</select>`:'';
  const quote=`<blockquote class="quote">${esc(passageText(passage))}</blockquote>`;
  if(state.tab!=='commentary')root.innerHTML=quote+picker+'<p class="loading">Finding context…</p>';try{if(state.tab==='commentary'){await renderCommentary(root,quote,id);}
 else if(state.tab==='language'){const d=await api(`d/bsb-interlinear/${state.book}/${state.chapter}.json`);if(id!==studyId)return;const words=d.chapter.content.find(v=>v.verse===state.verse)?.words||[];root.innerHTML=quote+picker+`<div class="source-label">BEREAN INTERLINEAR · ${words[0]?.language==='hebrew'?'HEBREW':'GREEK'}</div><h3>Behind the words</h3><p class="muted">Select an original-language word for its definition and grammar. Glosses follow the Berean text; they aren’t a word-for-word mapping to every translation.</p><div class="word-grid" ${words[0]?.language==='hebrew'?'dir="rtl"':''}>${words.map((w,i)=>`<button class="word" data-word="${i}"><b>${esc(w.text)}</b><small dir="ltr">${esc(w.transliteration)}</small><span dir="ltr">${esc(w.gloss||'—')}</span></button>`).join('')}</div><div id="definition" aria-live="polite"></div><p class="attribution">Interlinear: Berean Bible, public domain. Definitions: <a href="https://github.com/STEPBible/STEPBible-Data" target="_blank" rel="noopener noreferrer">STEPBible / Tyndale House, Cambridge</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>. Data formatted by AO Lab.</p>`;root.querySelectorAll('[data-word]').forEach(b=>b.onclick=()=>loadWord(words[Number(b.dataset.word)],id));}
 else if(state.tab==='notes'){renderNotes(quote);}
+else if(state.tab==='related'){await renderRelated(root,quote,passage,id);}
 else if(state.tab==='compare'){
  const card=(label,text,dir='ltr')=>`<article class="translation-compare-card"><small>${esc(label)}</small><div dir="${dir==='rtl'?'rtl':'ltr'}">${esc(text)}</div></article>`;
  const primary=state.data.translation;
