@@ -210,3 +210,43 @@ test('startup reanchors direct links after preferences load, unless the reader h
   });
  }
 });
+
+test('related references preview without navigation and return to the source range',async()=>{
+ await reader('?book=PSA&chapter=119&verse=105&endVerse=106&translation=BSB',async(evaluate,doc,win)=>{
+  await evaluate(`
+   const verse=(number,text)=>({type:'verse',number,content:[text]});
+   const psalm={translation:{id:'BSB',name:'Berean'},chapter:{content:[verse(105,'Source verse'),verse(106,'Next verse')]}};
+   const proverb={translation:{id:'BSB',name:'Berean',licenseUrl:'https://example.test/'},chapter:{content:[verse(23,'Related verse')]}};
+   state.books=[{id:'PSA',name:'Psalms',numberOfChapters:150},{id:'PRO',name:'Proverbs',numberOfChapters:31}];
+   api=async path=>{
+    if(path==='d/open-cross-ref/PSA/119.json')return {chapter:{content:[
+     {verse:105,references:[{book:'PRO',chapter:6,verse:23,score:9}]},
+     {verse:106,references:[{book:'PRO',chapter:6,verse:23,score:8},{book:'PSA',chapter:119,verse:105,score:20}]}
+    ]}};
+    if(path==='d/open-cross-ref/PRO/6.json')return {chapter:{content:[]}};
+    if(path==='BSB/PRO/6.json')return proverb;
+    return psalm;
+   };
+   selectStudyTab('related');
+   loadChapter(linkedRange,psalm);
+  `);
+  await new Promise(resolve=>setImmediate(resolve));
+  const row=doc.querySelector('.related-reference');
+  assert.equal(doc.querySelectorAll('.related-reference').length,1);
+  assert.match(row.textContent,/Proverbs 6:23/);
+  const source=win.location.href;
+  row.open=true;
+  row.dispatchEvent(new win.Event('toggle'));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.match(row.textContent,/Related verse/);
+  assert.equal(win.location.href,source);
+  await row.querySelector('button').onclick();
+  assert.equal(new URL(win.location.href).searchParams.get('book'),'PRO');
+  const back=doc.getElementById('relatedBack');
+  assert.equal(back.hidden,false);
+  await back.onclick();
+  assert.deepEqual(Object.fromEntries(new URL(win.location.href).searchParams),Object.fromEntries(new URL(source).searchParams));
+  assert.equal(back.hidden,true);
+  assert.equal(doc.getElementById('studyRef').textContent,'Psalms 119:105–106');
+ });
+});
