@@ -327,7 +327,7 @@ function comparisonReference(from,to,bookId,chapter,first,last){
 let relatedOrigin;
 const relatedBack=$('relatedBack');
 function closeStudyForRelatedJump(){
- if(document.body.classList.contains('mobile-study-open'))$('mobileCloseStudy').click();
+ if(document.body.classList.contains('mobile-study-open'))document.dispatchEvent(new Event('close-mobile-study'));
 }
 function focusReadingVerse(){
  $('chapterText').querySelector('[data-verse="'+state.verse+'"]')?.focus({preventScroll:true});
@@ -1220,10 +1220,10 @@ function finishStartup(){
 }
 async function start(){
  bookNavigation=setupBookSidebar({state,esc,navigate,toast,openVerseSearch});
- setupForegroundScroll();
+ const foregroundScroll=setupForegroundScroll();
  highlightTools=setupPassageHighlights({state,save,renderChapter,isSelected:number=>!selectionCleared&&inRange(number),canEdit:()=>!account||account.canEdit(),toast});
  streak=setupStreak({modal,toast,read:stored,write:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}},changed:()=>account?.preferencesChanged(),canRead:()=>Boolean(state.data)&&(!account||account.canEdit())});
- setupMobile({state,modal,esc,navigate,toast,openVerseSearch});
+ setupMobile({state,modal,esc,navigate,toast,openVerseSearch,refreshForeground:foregroundScroll.refresh});
  setupDesktopPanels();
  await init();
  startupLinkRevision=loadId;
