@@ -1,6 +1,20 @@
-export const validPassage=k=>/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}$/.test(k);
-export function validatePayload(k,n){return validPassage(k)&&n&&typeof n.text==='string'&&n.text.length<=200000&&typeof n.bookName==='string'&&n.bookName.length<150&&Number.isInteger(n.chapter)&&Number.isInteger(n.verse)&&`${n.book}.${n.chapter}.${n.verse}`===k;}
-export function payloadFor(k,notes,highlights){const [book,chapter,verse]=k.split('.');return {...(notes[k]||{text:'',book,bookName:book,chapter:Number(chapter),verse:Number(verse),updatedAt:new Date().toISOString()}),highlighted:Boolean(highlights[k])};}
+const passagePattern=/^([A-Z0-9]{3})\.([1-9]\d{0,2})\.([1-9]\d{0,2})(?:-([1-9]\d{0,2}))?$/;
+export function validPassage(key){
+ const match=passagePattern.exec(key);
+ return Boolean(match&&(!match[4]||Number(match[4])>Number(match[3])));
+}
+export function validatePayload(key,note){
+ const match=passagePattern.exec(key);
+ return validPassage(key)&&note&&typeof note.text==='string'&&note.text.length<=200000
+  &&typeof note.bookName==='string'&&note.bookName.length<150&&note.book===match[1]
+  &&note.chapter===Number(match[2])&&note.verse===Number(match[3])
+  &&(match[4]?note.endVerse===Number(match[4])&&!note.highlighted:note.endVerse===undefined);
+}
+export function payloadFor(key,notes,highlights){
+ const [book,chapter,verses]=key.split('.');
+ const [verse,endVerse]=verses.split('-').map(Number);
+ return {...(notes[key]||{text:'',book,bookName:book,chapter:Number(chapter),verse,...(endVerse?{endVerse}:{}),updatedAt:new Date().toISOString()}),highlighted:Boolean(highlights[key])};
+}
 export function recordsToState(rows){const notes={},highlights={};for(const r of rows){if(!validatePayload(r.passage,r.payload))continue;if(r.payload.text)notes[r.passage]=r.payload;if(r.payload.highlighted)highlights[r.passage]=true;}return {notes,highlights};}
 // Merge background updates without touching navigation, forms or selection.
 export function mergeRemoteStudy(rows,{notes,highlights,revisions,pending,editingKey}){

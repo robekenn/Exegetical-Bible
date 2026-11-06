@@ -119,7 +119,7 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
    if(JSON.stringify(ids)!==JSON.stringify(accountFavorites))showFavorites(ids);
   }
   if(entries.error)return;
-  const updated=mergeRemoteStudy(entries.data,{notes:state.notes,highlights:state.highlights,revisions,pending:dirty,editingKey:document.activeElement?.id==='noteText'?`${state.book}.${state.chapter}.${state.verse}`:null});
+  const updated=mergeRemoteStudy(entries.data,{notes:state.notes,highlights:state.highlights,revisions,pending:dirty,editingKey:document.activeElement?.id==='noteText'?document.activeElement.dataset.noteKey:null});
   if(updated){lastSnapshot=currentPayloads();rememberRevisions();cache();refresh({background:true});}
  }finally{refreshing=false;}
  }window.addEventListener('online',()=>{push();preferenceSync?.flush();display();});window.addEventListener('offline',display);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){push();preferenceSync?.flush();pull();}});setInterval(pull,30000);window.addEventListener('beforeunload',e=>{if(dirty.size||preferenceSync?.pending){e.preventDefault();e.returnValue='';}});
