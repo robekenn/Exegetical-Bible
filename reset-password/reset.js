@@ -12,6 +12,7 @@ const status=document.getElementById('resetStatus');
 const requestForm=document.getElementById('requestForm');
 const passwordForm=document.getElementById('newPasswordForm');
 const password=document.getElementById('newPassword');
+const retrySignOut=document.getElementById('retrySignOut');
 const visibility=document.getElementById('newPasswordVisibility');
 
 const invalidLink='This reset link is invalid or has expired. Request a new link below.';
@@ -62,6 +63,29 @@ visibility.onclick=()=>{
  visibility.textContent=show?'Hide password':'Show password';
 };
 
+async function signOutAllDevices(){
+ retrySignOut.disabled=true;
+ status.textContent='Password updated. Signing out all devices…';
+ try{
+  const client=await clientPromise;
+  const {data,error:sessionError}=await client.auth.getSession();
+  if(sessionError||!data.session)throw new Error('Recovery session unavailable');
+  // Use the user’s recovery token. Keep it in memory if the request needs a retry.
+  const {error}=await client.auth.admin.signOut(data.session.access_token,'global');
+  if(error)throw error;
+  clientPromise=null;
+  retrySignOut.hidden=true;
+  status.textContent='Password updated. All sessions were revoked. Return to the Bible to sign in with your new password.';
+ }catch{
+  retrySignOut.hidden=false;
+  status.textContent='Your password was updated, but sign-out on all devices could not be confirmed. Retry below.';
+ }finally{
+  retrySignOut.disabled=false;
+ }
+}
+
+retrySignOut.onclick=signOutAllDevices;
+
 passwordForm.onsubmit=async event=>{
  event.preventDefault();
  if(!passwordFitsProvider(password.value,status))return;
@@ -78,8 +102,7 @@ passwordForm.onsubmit=async event=>{
   }
   passwordForm.reset();
   passwordForm.hidden=true;
-  status.textContent='Password updated. Return to the Bible to sign in with your new password.';
-  void client.auth.signOut({scope:'local'}).catch(()=>{});
+  await signOutAllDevices();
  }catch{
   status.textContent='Could not update your password. Please try again.';
  }finally{
@@ -96,7 +119,7 @@ if(!recovery||!access_token||!refresh_token||linkFailed){
   const {data,error}=await client.auth.setSession({access_token,refresh_token});
   if(error||!data.session)showRequest(invalidLink);
   else{
-   status.textContent='Choose a new password for your account.';
+   status.textContent='Choose a new password. Changing it will sign out all devices on your account.';
    passwordForm.hidden=false;
   }
  }catch{

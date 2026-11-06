@@ -44,7 +44,8 @@ test('valid recovery uses an isolated session and updates the exact new password
  const auth={
   setSession:async tokens=>{authCalls.push(['session',tokens]);return {data:{session:{user:{id:'test-user'}}},error:null};},
   updateUser:async data=>{authCalls.push(['update',data]);return {error:null};},
-  signOut:async options=>{authCalls.push(['signOut',options]);}
+  getSession:async()=>({data:{session:{access_token:'recovery-token'}}}),
+  admin:{signOut:async(token,scope)=>{authCalls.push(['signOut',token,scope]);return {error:null};}}
  };
  const {dom,calls,get}=await resetPage(recoveryHash,auth);
  try{
@@ -67,10 +68,44 @@ test('valid recovery uses an isolated session and updates the exact new password
   get('newPasswordVisibility').click();
   assert.equal(input.type,'text');
   await form.onsubmit(event);
-  assert.deepEqual(authCalls.slice(1),[['update',{password}],['signOut',{scope:'local'}]]);
+  assert.deepEqual(authCalls.slice(1),[['update',{password}],['signOut','recovery-token','global']]);
   assert.equal(input.value,'');
   assert.equal(form.hidden,true);
-  assert.match(get('resetStatus').textContent,/Password updated/);
+  assert.match(get('resetStatus').textContent,/All sessions were revoked/);
+ }finally{dom.window.close();}
+});
+
+test('revocation errors can be retried without changing the password again',async()=>{
+ const calls=[];
+ let updateError={message:'Password is too weak'};
+ const auth={
+  setSession:async()=>({data:{session:{}}}),
+  updateUser:async()=>{calls.push('update');return {error:updateError};},
+  getSession:async()=>({data:{session:{access_token:'recovery-token'}}}),
+  admin:{signOut:async(token,scope)=>{
+   calls.push([token,scope]);
+   return {error:calls.length===3?{status:503}:null};
+  }}
+ };
+ const {dom,get}=await resetPage(recoveryHash,auth);
+ try{
+  const form=get('newPasswordForm'),input=get('newPassword'),retry=get('retrySignOut');
+  const event={preventDefault(){},submitter:form.querySelector('[type=submit]')};
+  input.value='new-password-with-symbols!';
+  await form.onsubmit(event);
+  assert.equal(form.hidden,false);
+  assert.equal(retry.hidden,true);
+  assert.deepEqual(calls,['update']);
+  updateError=null;
+  await form.onsubmit(event);
+  assert.equal(form.hidden,true);
+  assert.equal(input.value,'');
+  assert.equal(retry.hidden,false);
+  assert.match(get('resetStatus').textContent,/could not be confirmed/);
+  await retry.onclick();
+  assert.equal(retry.hidden,true);
+  assert.match(get('resetStatus').textContent,/All sessions were revoked/);
+  assert.deepEqual(calls,['update','update',['recovery-token','global'],['recovery-token','global']]);
  }finally{dom.window.close();}
 });
 

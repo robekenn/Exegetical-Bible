@@ -62,7 +62,11 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
   queuePreferences(changes);
   return true;
  }
- async function loadCloud(session,force=false){if(sessionEnded()&&session)return;sessionToken=session?.access_token;const next=session?.user||null;if(!force&&next?.id===user?.id&&ready)return;if(!next&&!user&&ready)return;const id=++epoch;clearTimeout(changeTimer);clearTimeout(prefTimer);preferenceSync?.dispose();preferenceSync=null;user=next;document.dispatchEvent(new CustomEvent('study-auth-changed',{detail:{id:user?.id||null}}));ready=false;favoritesReady=false;dirty.clear();revisions.clear();conflicts.clear();syncError='';
+ async function loadCloud(session,force=false){if(sessionEnded()&&session)return;sessionToken=session?.access_token;const next=session?.user||null;if(!force&&next?.id===user?.id&&ready)return;if(!next&&!user&&ready)return;if(user&&!next){
+  if($('modal')?.open)$('modal').close();
+  $('modalBody')?.replaceChildren();
+ }
+ const id=++epoch;clearTimeout(changeTimer);clearTimeout(prefTimer);preferenceSync?.dispose();preferenceSync=null;user=next;document.dispatchEvent(new CustomEvent('study-auth-changed',{detail:{id:user?.id||null}}));ready=false;favoritesReady=false;dirty.clear();revisions.clear();conflicts.clear();syncError='';
  if(!user){showFavorites(localRead(favoriteStorageKey,[]));state.notes=localRead('exegetical-notes',{});state.highlights=localRead('exegetical-highlights',{});ready=true;refresh();display();return;}
  const settingsKey=prefix()+'-pending-preferences';
  preferenceSync=createPreferenceSync({
@@ -183,12 +187,51 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
   lastSnapshot.clear();
   void loadCloud(null);
  });
- if(client){const initial=await client.auth.getSession();if(!initial.data.session){const oldKey='sb-'+new URL(config.supabaseUrl).hostname.split('.')[0]+'-auth-token';const legacy=localRead(oldKey,null);if(legacy?.access_token&&legacy?.refresh_token){const migrated=await client.auth.setSession({access_token:legacy.access_token,refresh_token:legacy.refresh_token});if(!migrated.error)localStorage.removeItem(oldKey);}}client.auth.onAuthStateChange((_event,session)=>{setTimeout(()=>{if(sessionEnded()&&session)return;loadCloud(session);},0);});const {data}=await client.auth.getSession();if(location.pathname==='/auth/callback'&&data.session){const accepted=Number(sessionStorage.getItem('exegetical-google-consent'));sessionStorage.removeItem('exegetical-google-consent');if(accepted&&Date.now()-accepted>=0&&Date.now()-accepted<3600000&&data.session.user.identities?.some(i=>i.provider==='google'))await client.auth.updateUser({data:{terms_version:'2026-11-02',terms_accepted_at:new Date(accepted).toISOString()}});}await loadCloud(data.session);if(location.pathname==='/auth/callback'&&!data.session){if(callbackFailed){authForm();$('googleAuthMessage').textContent='Sign-in was cancelled or could not be completed. Please try again.';history.replaceState(null,'','/');}}}else{ready=true;display();}
+ async function sessionRevoked(token){
+  if(!token||navigator.onLine===false)return false;
+  try{
+   // getUser validates the session with Auth and clears revoked browser sessions.
+   const {error}=await client.auth.getUser();
+   return error?.name==='AuthSessionMissingError';
+  }catch{return false;}
+ }
+ if(client){
+  const initial=await client.auth.getSession();
+  if(!initial.data.session){
+   const legacy=localRead(authKey,null);
+   if(legacy?.access_token&&legacy?.refresh_token){
+    const migrated=await client.auth.setSession({access_token:legacy.access_token,refresh_token:legacy.refresh_token});
+    if(!migrated.error)localStorage.removeItem(authKey);
+   }
+  }
+  const {data}=await client.auth.getSession();
+  const session=await sessionRevoked(data.session?.access_token)?null:data.session;
+  client.auth.onAuthStateChange((event,updatedSession)=>{
+   if(event==='INITIAL_SESSION')return;
+   setTimeout(()=>{if(!sessionEnded()||!updatedSession)loadCloud(updatedSession);},0);
+  });
+  if(location.pathname==='/auth/callback'&&session){
+   const accepted=Number(sessionStorage.getItem('exegetical-google-consent'));
+   sessionStorage.removeItem('exegetical-google-consent');
+   if(accepted&&Date.now()-accepted>=0&&Date.now()-accepted<3600000&&session.user.identities?.some(i=>i.provider==='google'))await client.auth.updateUser({data:{terms_version:'2026-11-02',terms_accepted_at:new Date(accepted).toISOString()}});
+  }
+  await loadCloud(session);
+  if(location.pathname==='/auth/callback'&&!session&&callbackFailed){
+   authForm();
+   $('googleAuthMessage').textContent='Sign-in was cancelled or could not be completed. Please try again.';
+   history.replaceState(null,'','/');
+  }
+ }else{ready=true;display();}
  window.addEventListener('online',push);async function pull(){
- if(refreshing||!user||!ready||dirty.size||document.visibilityState!=='visible')return;
- refreshing=true;const id=epoch,owner=user.id;
+ if(refreshing||!user||document.visibilityState!=='visible')return;
+ refreshing=true;const id=epoch,owner=user.id,token=sessionToken;
  const revision=favoriteRevision;
  try{
+  if(await sessionRevoked(token)){
+   if(id===epoch&&token===sessionToken)await loadCloud(null);
+   return;
+  }
+  if(id!==epoch||!ready||dirty.size)return;
   const [entries,preferences]=await Promise.all([
    client.from('study_entries').select('*').eq('user_id',owner).order('passage'),
    favoritesReady&&!preferenceSync?.pending?readPreferences(owner):null
@@ -202,6 +245,6 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
   const updated=mergeRemoteStudy(entries.data,{notes:state.notes,highlights:state.highlights,revisions,pending:dirty,editingKey:document.activeElement?.id==='noteText'?document.activeElement.dataset.noteKey:null});
   if(updated){lastSnapshot=currentPayloads();rememberRevisions();cache();refresh({background:true});}
  }finally{refreshing=false;}
- }window.addEventListener('online',()=>{push();preferenceSync?.flush();display();});window.addEventListener('offline',display);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){push();preferenceSync?.flush();pull();}});setInterval(pull,30000);window.addEventListener('beforeunload',e=>{if(dirty.size||preferenceSync?.pending){e.preventDefault();e.returnValue='';}});
+ }window.addEventListener('online',()=>{pull();push();preferenceSync?.flush();display();});window.addEventListener('offline',display);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){push();preferenceSync?.flush();pull();}});setInterval(pull,30000);window.addEventListener('beforeunload',e=>{if(dirty.size||preferenceSync?.pending){e.preventDefault();e.returnValue='';}});
  return {endSession,changed:mutate,preferencesChanged,changeFavorite,getUser:()=>user,getClient:()=>client,signIn:authForm,isUser:()=>Boolean(user),canEdit:()=>!user||ready,config,status:()=>saveState().text,cacheKey:k=>user?prefix()+'-'+k:k};
 }
