@@ -125,8 +125,8 @@ async function detail(id){
    ${report.ban_id?'<button type="button" id="findAppealedBan">View ban</button>':''}
    <h3>Details</h3><pre>${esc(report.details)}</pre>
    ${report.evidence?`<h3>Message evidence</h3>
-    <p>Message sender: ${esc(report.evidence.sender||'Unverified')}<br>Message recipient: ${esc(report.evidence.recipient||'Unverified')}</p>
-    ${report.evidence.sender!==report.subject||!report.evidence.sender||report.evidence.recipient!==report.reporter?`<p class="error">Message attribution does not match the report or cannot be verified. Review independently before taking action.</p>`:''}
+    <p>Message sender: ${esc(report.evidence.sender||'Unverified')}<br>${report.evidence.group?'Group: '+esc(report.evidence.group):'Message recipient: '+esc(report.evidence.recipient||'Unverified')}</p>
+    ${report.evidence.sender!==report.subject||!report.evidence.sender||(!report.evidence.group&&report.evidence.recipient!==report.reporter)?`<p class="error">Message attribution does not match the report or cannot be verified. Review independently before taking action.</p>`:''}
     <pre>${esc(JSON.stringify(report.evidence,null,2))}</pre>`:''}
    ${appeal?'':`<form id="reviewForm">
     <label class="label" for="reviewStatus">Status</label>

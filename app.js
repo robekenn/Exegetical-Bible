@@ -1147,8 +1147,14 @@ function notebook(){
   }
   const entries=Object.entries(state.notes).sort((a,b)=>(b[1].updatedAt||'').localeCompare(a[1].updatedAt||''));
   list.innerHTML=entries.filter(([,note])=>normalizeNoteSearch(`${note.text} ${note.bookName} ${note.chapter}:${noteVerseLabel(note)}`).includes(q))
-   .map(([key,note])=>`<article class="notebook-entry"><button type="button" data-note="${esc(key)}">${esc(note.bookName)} ${esc(note.chapter)}:${esc(noteVerseLabel(note))} ↗</button><p>${esc(note.text)}</p><small class="muted">${esc(new Date(note.updatedAt).toLocaleDateString())}</small></article>`).join('')
+   .map(([key,note])=>`<article class="notebook-entry"><button type="button" data-note="${esc(key)}">${esc(note.bookName)} ${esc(note.chapter)}:${esc(noteVerseLabel(note))} ↗</button> <button type="button" data-share-note="${esc(key)}">Share note</button><p>${esc(note.text)}</p><small class="muted">${esc(new Date(note.updatedAt).toLocaleDateString())}</small></article>`).join('')
    ||`<p class="muted">${q?'No matching notes.':'No notes yet.'}</p>`;
+  list.querySelectorAll('[data-share-note]').forEach(button=>button.onclick=()=>{
+   const note=state.notes[button.dataset.shareNote];
+   if(!note?.text)return;
+   const {book,chapter,verse,endVerse,text}=note;
+   document.dispatchEvent(new CustomEvent('share-study-verse',{detail:{kind:'note',reference:{book,chapter,verse,...(endVerse?{endVerse}:{}),translation:state.translation},text}}));
+  });
   list.querySelectorAll('[data-note]').forEach(button=>button.onclick=async()=>{
    const note=state.notes[button.dataset.note];
    if(!state.books.some(book=>book.id===note.book&&note.chapter<=book.numberOfChapters)){
@@ -1235,7 +1241,14 @@ async function start(){
  applyPreferences:applyAccountPreferences
  });
  if(account.config.esvEnabled&&!state.translations.some(t=>t.id==='ESV'))state.translations.unshift({id:'ESV',name:'English Standard Version',englishName:'English Standard Version',shortName:'ESV',language:'eng',languageEnglishName:'English'});
- createCommunity({account,state,esc,modal,toast,openVerse:async v=>{if(state.translations.some(t=>t.id===v.translation)){state.translation=v.translation;await getBooks();}if(state.books.some(b=>b.id===v.book))navigate(v.book,Math.min(Number(v.chapter),state.books.find(b=>b.id===v.book).numberOfChapters),Number(v.verse));else toast('This book is not available in the selected translation.');}});
+ createCommunity({account,state,esc,modal,toast,currentPassage:()=>{const [verse,endVerse]=activeRange();return {book:state.book,chapter:state.chapter,verse,endVerse,translation:state.translation};},openVerse:async v=>{if(state.translations.some(t=>t.id===v.translation)){state.translation=v.translation;await getBooks();}if(state.books.some(b=>b.id===v.book))navigate(v.book,Math.min(Number(v.chapter),state.books.find(b=>b.id===v.book).numberOfChapters),Number(v.verse),Number(v.endVerse||v.verse));else toast('This book is not available in the selected translation.');}});
+ if(new URLSearchParams(location.search).get('invite')==='1'){
+  const url=new URL(location.href);
+  url.searchParams.delete('invite');
+  history.replaceState(null,'',url);
+  if(!account.isUser())account.signIn('signup');
+  else document.dispatchEvent(new CustomEvent('open-community',{detail:'friends'}));
+ }
  renderStudy();
 }
 start().catch(e=>showError($('chapterText'),e,()=>location.reload())).finally(finishStartup);
