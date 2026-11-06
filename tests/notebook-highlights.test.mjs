@@ -39,11 +39,9 @@ test('notebook groups consecutive saved highlights and opens the first verse', a
   assert.match(card.querySelector('[data-highlight-notes]').textContent,/Personal note/);
   card.querySelector('[data-add-highlight-note]').click();
   const editor=card.querySelector('form');
-  editor.elements.verse.value='17';
-  editor.elements.verse.dispatchEvent(new dom.window.Event('change'));
   editor.elements.text.value='Note from the highlight card';
   editor.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
-  assert.equal(vm.runInContext("state.notes['JHN.3.17'].text",context),'Note from the highlight card');
+  assert.equal(vm.runInContext("state.notes['JHN.3.16-18'].text",context),'Note from the highlight card');
   assert.match(card.querySelector('[data-highlight-notes]').textContent,/Personal note/);
   assert.match(card.querySelector('[data-highlight-notes]').textContent,/Note from the highlight card/);
   const search=document.getElementById('noteSearch');

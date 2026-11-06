@@ -1,7 +1,7 @@
 -- Private study records. Run once for this application's Supabase project.
 create table if not exists public.study_entries (
  user_id uuid not null references auth.users(id) on delete cascade,
- passage text not null check (passage ~ '^[A-Z0-9]{3}\.[1-9][0-9]{0,2}\.[1-9][0-9]{0,2}$'),
+ passage text not null check (passage ~ '^[A-Z0-9]{3}\.[1-9][0-9]{0,2}\.[1-9][0-9]{0,2}(-[1-9][0-9]{0,2})?$'),
  payload jsonb not null check (jsonb_typeof(payload) = 'object' and length(payload::text) <= 250000),
  revision bigint not null default 1,
  updated_at timestamptz not null default now(),
