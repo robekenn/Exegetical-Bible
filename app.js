@@ -72,9 +72,7 @@ async function navigate(b,c,v=1,end=v){state.book=b;state.chapter=c;state.verse=
 async function loadChapter(range=null){selectedRange=null;selectionCleared=false;resetVerseTap();state.data=null;$('passageHighlights').hidden=true;const id=++loadId;++studyId;$('chapterText').setAttribute('aria-busy','true');$('chapterText').innerHTML='<div class="passage-skeleton" role="status" aria-label="Loading passage"><span class="sr-only">Opening the passage…</span>'+Array.from({length:9},()=>'<div class="skeleton-line" aria-hidden="true"></div>').join('')+'</div>';$('studyBody').innerHTML='<p class="loading">Loading study resources…</p>';$('chapterTitle').innerHTML=`${esc(book()?.name||state.book)} <span>${state.chapter}</span>`;$('bookSubtitle').textContent=book()?.order>=40&&book()?.order<=43?'THE GOSPEL ACCORDING TO':'THE BOOK OF';$('previous').disabled=true;$('next').disabled=true;try{const d=await api(`${state.translation}/${state.book}/${state.chapter}.json`);if(id!==loadId)return;state.data=d;if(!verses().some(v=>v.number===state.verse))state.verse=verses().find(v=>Array.isArray(range)&&inRange(v.number,range))?.number||verses()[0]?.number||1;if(Array.isArray(range)&&range[0]<range[1]&&inRange(state.verse,range))selectedRange=range;const t=d.translation;$('translationName').textContent=t.englishName||t.name;$('translationButton').textContent=(t.shortName||t.id)+' ▾';$('chapterText').dir=t.textDirection||'ltr';$('translationCredit').innerHTML=`${esc(t.name)} · <a href="${safeURL(t.licenseUrl||t.website)}" target="_blank" rel="noopener noreferrer">Translation source & license ↗</a>${t.licenseNotice?'<br>'+esc(flatten(t.licenseNotice)):''}`;$('chapterPosition').textContent=`Chapter ${state.chapter} of ${book().numberOfChapters}`;const idx=state.books.indexOf(book());$('previous').disabled=idx===0&&state.chapter===1;$('next').disabled=idx===state.books.length-1&&state.chapter===book().numberOfChapters;renderChapter();reportBibleView(d);position();renderStudy();}catch(e){if(id!==loadId)return;state.data=null;showError($('chapterText'),e,()=>loadChapter(range));$('studyBody').textContent='Open a passage to begin studying.';}finally{if(id===loadId)$('chapterText').removeAttribute('aria-busy');}}
 let selectedRange=null,selectionCleared=false;
 let lastVerseTap=null;
-let deselectTimer;
 function resetVerseTap(){
- clearTimeout(deselectTimer);
  lastVerseTap=null;
 }
 const activeRange=()=>selectedRange||[state.verse,state.verse];
@@ -167,15 +165,17 @@ $('chapterText').addEventListener('click',event=>{
  const now=performance.now();
  const pointerClick=event.detail>0||event.pointerType==='touch';
  const open=pointerClick&&lastVerseTap?.number===number&&now-lastVerseTap.time<=DOUBLE_TAP_MS;
- const pending=lastVerseTap?.remove;
- resetVerseTap();
- if(open){activateVerse(number,true);return;}
- if(pending)deselectVerse(pending);
- const remove=selectedRange&&inRange(number)?number:null;
- if(pointerClick)lastVerseTap={number,time:now,remove};
- if(!remove){activateVerse(number,false);return;}
- if(!pointerClick){deselectVerse(number);return;}
- deselectTimer=setTimeout(()=>{resetVerseTap();deselectVerse(number);},DOUBLE_TAP_MS);
+ if(open){
+  // A double tap studies the range before the first tap trimmed it.
+  if(lastVerseTap.previousRange)selectedRange=lastVerseTap.previousRange;
+  resetVerseTap();
+  activateVerse(number,true);
+  return;
+ }
+ const previousRange=selectedRange&&inRange(number)?selectedRange:null;
+ lastVerseTap=pointerClick?{number,time:now,previousRange}:null;
+ if(previousRange)deselectVerse(number);
+ else activateVerse(number,false);
 });
 $('chapterText').addEventListener('keydown',event=>{
  const button=event.target.closest('[data-verse]');
