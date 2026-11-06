@@ -95,10 +95,11 @@ async function getBooks(){const d=await api(`${state.translation}/books.json`);s
 function position(){save('exegetical-position',{book:state.book,chapter:state.chapter,translation:state.translation});const u=new URL(location.href);u.searchParams.set('book',state.book);u.searchParams.set('chapter',state.chapter);const [first,last]=activeRange();u.searchParams.set('verse',first);if(last>first)u.searchParams.set('endVerse',last);else u.searchParams.delete('endVerse');u.searchParams.set('translation',state.translation);history.replaceState(null,'',u);}
 async function navigate(b,c,verse,end=verse){state.book=b;state.chapter=c;state.verse=verse??1;selectors();await loadChapter(verse===undefined?null:[verse,end],null,false,verse!==undefined);}
 async function loadChapter(range=null,prepared=null,cleared=false,reveal=false){selectedRange=null;selectionCleared=cleared;resetVerseTap();state.data=null;$('passageHighlights').hidden=true;const id=++loadId;++studyId;$('chapterText').setAttribute('aria-busy','true');$('chapterText').innerHTML='<div class="passage-skeleton" role="status" aria-label="Loading passage"><span class="sr-only">Opening the passage…</span>'+Array.from({length:9},()=>'<div class="skeleton-line" aria-hidden="true"></div>').join('')+'</div>';$('studyBody').innerHTML='<p class="loading">Loading study resources…</p>';$('chapterTitle').innerHTML=`${esc(book()?.name||state.book)} <span>${state.chapter}</span>`;$('bookSubtitle').textContent=['MAT','MRK','LUK','JHN'].includes(state.book)?'THE GOSPEL ACCORDING TO':'THE BOOK OF';$('previous').disabled=true;$('next').disabled=true;try{const d=prepared||await api(`${state.translation}/${state.book}/${state.chapter}.json`);if(id!==loadId)return;state.data=d;if(!verses().some(v=>v.number===state.verse))state.verse=verses().find(v=>Array.isArray(range)&&inRange(v.number,range))?.number||verses()[0]?.number||1;if(Array.isArray(range)&&range[0]<range[1]&&inRange(state.verse,range))selectedRange=range;const t=d.translation;$('translationName').textContent=t.englishName||t.name;$('translationButton').textContent=(t.shortName||t.id)+' ▾';$('chapterText').dir=t.textDirection||'ltr';$('translationCredit').innerHTML=`${esc(t.name)} · <a href="${safeURL(t.licenseUrl||t.website)}" target="_blank" rel="noopener noreferrer">Translation source & license ↗</a>${t.licenseNotice?'<br>'+esc(flatten(t.licenseNotice)):''}`;$('chapterPosition').textContent=`Chapter ${state.chapter} of ${book().numberOfChapters}`;const idx=state.books.indexOf(book());$('previous').disabled=idx===0&&state.chapter===1;$('next').disabled=idx===state.books.length-1&&state.chapter===book().numberOfChapters;renderChapter();reportBibleView(d);position();renderStudy();if(reveal)revealPassage(range);}catch(e){if(id!==loadId)return;state.data=null;showError($('chapterText'),e,()=>loadChapter(range,null,cleared,reveal));$('studyBody').textContent='Open a passage to begin studying.';}finally{if(id===loadId)$('chapterText').removeAttribute('aria-busy');}}
-function revealPassage(range){
+function revealPassage(range,notify=true){
  const available=verses().filter(v=>inRange(v.number,range));
  const number=available[0]?.number??state.verse;
  $('chapterText').querySelector(`[data-verse="${number}"]`)?.scrollIntoView?.({block:'center',behavior:'instant'});
+ if(!notify)return;
  if(!available.length)toast('The requested verse or range is unavailable in this edition. Showing the chapter instead.');
  else if(available.length<range[1]-range[0]+1)toast('This edition omits some requested verse numbers.');
 }
@@ -988,6 +989,21 @@ async function applyAccountPreferences(p){
  state.books=books.books;
  await navigate(target.id,Math.max(1,Math.min(Number(p.chapter)||1,target.numberOfChapters)));
 }
+let startupLinkRevision;
+const startupInput=new AbortController();
+if(linkedRange){
+ for(const type of ['pointerdown','wheel','touchstart','keydown']){
+  window.addEventListener(type,()=>startupInput.abort(),{capture:true,passive:true,signal:startupInput.signal});
+ }
+}
+function finishStartup(){
+ document.dispatchEvent(new CustomEvent('app-ready'));
+ // Account hydration can change line wrapping or replace the chapter DOM after the first jump.
+ if(linkedRange&&state.data&&startupLinkRevision===loadId&&!startupInput.signal.aborted){
+  revealPassage(linkedRange,false);
+ }
+ startupInput.abort();
+}
 async function start(){
  bookNavigation=setupBookSidebar({state,esc,navigate,toast,openVerseSearch});
  setupForegroundScroll();
@@ -996,6 +1012,7 @@ async function start(){
  setupMobile({state,modal,esc,navigate,toast,openVerseSearch});
  setupDesktopPanels();
  await init();
+ startupLinkRevision=loadId;
  account=await createAccount({state,esc,modal,toast,refresh:(options={})=>{noteCount();if(options.background){const starts=noteStarts();document.querySelectorAll('[data-verse]').forEach(el=>{const k=state.book+'.'+state.chapter+'.'+el.dataset.verse;el.classList.toggle('highlighted',Boolean(state.highlights[k]));let dot=el.querySelector('.note-dot');if(starts.has(k)&&!dot){dot=document.createElement('span');dot.className='note-dot';dot.textContent='✎';dot.setAttribute('aria-label','Has note');el.append(dot);}else if(!starts.has(k)&&dot)dot.remove();});const editor=$('noteText');if(editor&&document.activeElement!==editor)editor.value=state.notes[editor.dataset.noteKey]?.text||'';return;}renderChapter();renderStudy();},
  localRead:stored,localWrite:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}},
  applyFavorites:setFavorites,
@@ -1006,4 +1023,4 @@ async function start(){
  createCommunity({account,state,esc,modal,toast,openVerse:async v=>{if(state.translations.some(t=>t.id===v.translation)){state.translation=v.translation;await getBooks();}if(state.books.some(b=>b.id===v.book))navigate(v.book,Math.min(Number(v.chapter),state.books.find(b=>b.id===v.book).numberOfChapters),Number(v.verse));else toast('This book is not available in the selected translation.');}});
  renderStudy();
 }
-start().catch(e=>showError($('chapterText'),e,()=>location.reload())).finally(()=>document.dispatchEvent(new CustomEvent('app-ready')));
+start().catch(e=>showError($('chapterText'),e,()=>location.reload())).finally(finishStartup);

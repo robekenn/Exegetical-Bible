@@ -189,3 +189,24 @@ test('shared passage URLs round-trip their range and reveal the first verse',asy
   assert.deepEqual(revealed.at(-1),['108','center']);
  });
 });
+
+test('startup reanchors direct links after preferences load, unless the reader has interacted',async()=>{
+ for(const interacted of [false,true]){
+  await reader('?book=PSA&chapter=119&verse=105&translation=BSB',async(evaluate,doc,win)=>{
+   const jumps=[];
+   win.HTMLElement.prototype.scrollIntoView=function(){jumps.push([this.dataset.verse,doc.documentElement.style.getPropertyValue('--reading-size')]);};
+   await evaluate(`
+    state.books=[{id:'PSA',name:'Psalms',numberOfChapters:150}];
+    state.tab='notes';
+    streak={merge(){}};
+    const result={translation:{id:'BSB',name:'Berean'},chapter:{content:[{type:'verse',number:105,content:['Verse']}]}};
+    loadChapter(linkedRange,result,false,true);
+    startupLinkRevision=loadId;
+   `);
+   if(interacted)win.dispatchEvent(new win.Event('wheel'));
+   await evaluate("applyAccountPreferences({size:30,dark:true})");
+   evaluate('finishStartup()');
+   assert.deepEqual(jumps,interacted?[['105','20px']]:[['105','20px'],['105','30px']]);
+  });
+ }
+});
