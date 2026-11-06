@@ -213,7 +213,7 @@ function renderChapter(){
  const notesByVerse=new Map();
  $('chapterText').innerHTML=state.data.chapter.content.map(v=>{
   if(v.type==='heading')return `<h3>${esc(flatten(v.content))}</h3>`;
-  if(v.type!=='verse')return '';
+  if(v.type!=='verse'||!Number.isInteger(v.number)||v.number<1||v.number>999)return '';
   const k=`${state.book}.${state.chapter}.${v.number}`;
   const verse=`<button type="button" class="verse ${state.highlights[k]?'highlighted':''}" data-verse="${v.number}" aria-label="${esc(book()?.name||state.book)} ${state.chapter}:${v.number}" aria-keyshortcuts="Shift+Enter"><sup>${v.number}</sup>${esc(flatten(v.content))}${starts.has(k)?'<span class="note-dot" aria-label="Has note">✎</span>':''}</button>`;
   const notes=notesFor(v);
@@ -893,7 +893,49 @@ function openVerseSearch(query,root,beforeOpen=()=>{}){
  return ()=>controller?.abort();
 }
 
-function exportNotes(){const blob=new Blob([JSON.stringify({format:'exegetical-backup',version:1,exportedAt:new Date().toISOString(),notes:state.notes,highlights:state.highlights},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='exegetical-notes-'+new Date().toISOString().slice(0,10)+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+const backupLimit=5_000_000;
+function notebookBackupParts(notes,highlights,exportedAt,limit=backupLimit){
+ const encode=new TextEncoder(),bytes=text=>encode.encode(text).length;
+ const header=JSON.stringify({format:'exegetical-backup',version:1,exportedAt}).slice(0,-1)+',"notes":{';
+ const separator='},"highlights":{',tail='}}';
+ const base=bytes(header+separator+tail);
+ const parts=[];
+ let group=[[],[]],size=base;
+ function flush(){
+  parts.push(header+group[0].join(',')+separator+group[1].join(',')+tail);
+  group=[[],[]];
+  size=base;
+ }
+ for(const [index,records] of [notes,highlights].entries()){
+  for(const [key,value] of Object.entries(records)){
+   const entry=JSON.stringify(key)+':'+JSON.stringify(value),length=bytes(entry);
+   if(base+length>limit)throw Error('A notebook entry is too large to back up.');
+   if(size+length+(group[index].length?1:0)>limit)flush();
+   size+=length+(group[index].length?1:0);
+   group[index].push(entry);
+  }
+ }
+ flush();
+ return parts;
+}
+function exportNotes(){
+ try{
+  const exportedAt=new Date().toISOString();
+  const parts=notebookBackupParts(state.notes,state.highlights,exportedAt);
+  const name='exegetical-notes-'+exportedAt.slice(0,10);
+  function download(index){
+   const blob=new Blob([parts[index]],{type:'application/json'});
+   const a=document.createElement('a');
+   a.href=URL.createObjectURL(blob);
+   a.download=name+(parts.length>1?`-part-${index+1}-of-${parts.length}`:'')+'.json';
+   a.click();
+   setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  }
+  if(parts.length===1){download(0);return;}
+  modal('Download notebook backup',`<p>Your notebook is split into ${parts.length} files. Download every part, then import each file individually to restore the full notebook.</p><div class="button-row">${parts.map((_,i)=>`<button type="button" data-backup-part="${i}">Download part ${i+1}</button>`).join('')}</div>`);
+  $('modalBody').querySelectorAll('[data-backup-part]').forEach(button=>button.onclick=()=>download(Number(button.dataset.backupPart)));
+ }catch(error){toast(error.message);}
+}
 function highlightedPassages(highlights){
  const verses=Object.entries(highlights).flatMap(([key,highlighted])=>{
   const match=highlighted===true&&/^([A-Z0-9]{3})\.([1-9]\d{0,2})\.([1-9]\d{0,2})$/.exec(key);
@@ -1116,7 +1158,7 @@ function notebook(){
    $('modal').close();
    selectStudyTab('notes');
    await navigate(note.book,note.chapter,note.verse,note.endVerse);
-   if(note.endVerse&&state.data&&state.book===note.book&&state.chapter===note.chapter&&!matchMedia('(max-width: 760px)').matches)openPassageStudy();
+   if(state.data&&state.book===note.book&&state.chapter===note.chapter)openPassageStudy();
   });
  }
  controls.forEach(button=>button.onclick=()=>{
@@ -1135,8 +1177,9 @@ function notebook(){
   }else render();
  };
  render();
- $('exportNotes').onclick=exportNotes;$('importNotes').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{if(account&&!account.canEdit())throw Error('Load your account before importing.');const file=e.target.files[0];if(!file)return;if(file.size>5_000_000)throw Error('Please choose a backup smaller than 5 MB.');const d=JSON.parse(await file.text());if(d.format!=='exegetical-backup'||d.version!==1||!d.notes||typeof d.notes!=='object'||Array.isArray(d.notes))throw Error('This is not a valid Exegetical backup.');const imported={};for(const [k,n]of Object.entries(d.notes)){if(!/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}(?:-[1-9]\d{0,2})?$/.test(k)||!n||typeof n.text!=='string'||n.text.length>200000||typeof n.bookName!=='string'||!Number.isInteger(n.chapter)||!Number.isInteger(n.verse)||(n.endVerse!==undefined&&(!Number.isInteger(n.endVerse)||n.endVerse<=n.verse))||noteKey(n.book,n.chapter,n.verse,n.endVerse)!==k||typeof n.updatedAt!=='string'||!Number.isFinite(Date.parse(n.updatedAt)))throw Error('The backup contains invalid notes.');imported[k]=n;}let conflicts=Object.keys(imported).filter(k=>state.notes[k]&&state.notes[k].text!==imported[k].text);if(conflicts.length&&!confirm(`This backup replaces ${conflicts.length} existing note(s). Continue?`))return;state.notes={...state.notes,...imported};if(d.highlights&&typeof d.highlights==='object')for(const [k,v]of Object.entries(d.highlights))if(/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}$/.test(k)&&v===true)state.highlights[k]=true;save('exegetical-notes',state.notes);save('exegetical-highlights',state.highlights);noteCount();renderChapter();renderStudy();notebook();toast('Backup imported.');}catch(error){toast(error.message||'Could not import this backup.');}};}
+ $('exportNotes').onclick=exportNotes;$('importNotes').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{if(account&&!account.canEdit())throw Error('Load your account before importing.');const owner=account?.getUser()?.id;const file=e.target.files[0];if(!file)return;if(file.size>backupLimit)throw Error('Please choose a backup smaller than 5 MB.');const d=JSON.parse(await file.text());if(account?.getUser()?.id!==owner||(account&&!account.canEdit()))throw Error('Account changed. Reopen the notebook before importing.');if(d.format!=='exegetical-backup'||d.version!==1||!d.notes||typeof d.notes!=='object'||Array.isArray(d.notes))throw Error('This is not a valid Exegetical backup.');const imported={};for(const [k,n]of Object.entries(d.notes)){if(!/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}(?:-[1-9]\d{0,2})?$/.test(k)||!n||typeof n.text!=='string'||n.text.length>200000||typeof n.bookName!=='string'||!Number.isInteger(n.chapter)||!Number.isInteger(n.verse)||(n.endVerse!==undefined&&(!Number.isInteger(n.endVerse)||n.endVerse<=n.verse))||noteKey(n.book,n.chapter,n.verse,n.endVerse)!==k||typeof n.updatedAt!=='string'||!Number.isFinite(Date.parse(n.updatedAt)))throw Error('The backup contains invalid notes.');imported[k]=n;}let conflicts=Object.keys(imported).filter(k=>state.notes[k]&&state.notes[k].text!==imported[k].text);if(conflicts.length&&!confirm(`This backup replaces ${conflicts.length} existing note(s). Continue?`))return;state.notes={...state.notes,...imported};if(d.highlights&&typeof d.highlights==='object')for(const [k,v]of Object.entries(d.highlights))if(/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}$/.test(k)&&v===true)state.highlights[k]=true;save('exegetical-notes',state.notes);save('exegetical-highlights',state.highlights);noteCount();renderChapter();renderStudy();notebook();toast('Backup imported.');}catch(error){toast(error.message||'Could not import this backup.');}};}
 document.addEventListener('study-auth-changed',()=>{
+ highlightDrafts.clear();
  if(!$('noteList'))return;
  if($('modal').open)$('modal').close();
  $('modalBody').replaceChildren();
@@ -1187,6 +1230,7 @@ async function start(){
  account=await createAccount({state,esc,modal,toast,refresh:(options={})=>{noteCount();if(options.background){const starts=noteStarts();document.querySelectorAll('[data-verse]').forEach(el=>{const k=state.book+'.'+state.chapter+'.'+el.dataset.verse;el.classList.toggle('highlighted',Boolean(state.highlights[k]));let dot=el.querySelector('.note-dot');if(starts.has(k)&&!dot){dot=document.createElement('span');dot.className='note-dot';dot.textContent='✎';dot.setAttribute('aria-label','Has note');el.append(dot);}else if(!starts.has(k)&&dot)dot.remove();});const editor=$('noteText');if(editor&&document.activeElement!==editor)editor.value=state.notes[editor.dataset.noteKey]?.text||'';return;}renderChapter();renderStudy();},
  localRead:stored,localWrite:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}},
  applyFavorites:setFavorites,
+ exportBackup:exportNotes,
  getPreferences:()=>({streak:streak.snapshot(),book:state.book,chapter:state.chapter,translation:state.translation,dark:document.body.classList.contains('dark'),size:Number(getComputedStyle(document.documentElement).getPropertyValue('--reading-size').replace('px',''))||20}),
  applyPreferences:applyAccountPreferences
  });

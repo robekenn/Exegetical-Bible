@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const types={abuse:'User report',bug:'Bug report',feedback:'Feedback',appeal:'Ban appeal',privacy:'Privacy',support:'Support',accessibility:'Accessibility'};
 const reviewStatuses=['open','reviewing','resolved','dismissed'];
-let client,view='reports',page=0,version=0,accountId=null,selectedBan='',search='';
+let client,sessionEnded=()=>false,view='reports',page=0,version=0,accountId=null,selectedBan='',search='';
 const status=message=>{$('adminStatus').textContent=message;};
 const timestamp=value=>esc(new Date(value).toLocaleString());
 
@@ -21,7 +21,7 @@ function lock(message){
 }
 async function request(query={},body){
  const {data}=await client.auth.getSession();
- const token=data.session?.access_token;
+ const token=sessionEnded()?null:data.session?.access_token;
  if(!token){lock('Sign in on the Bible site, then return here.');throw Error('Sign in required.');}
  const response=await fetch('/api/admin?'+new URLSearchParams(query),{
   method:body?'POST':'GET',
@@ -120,11 +120,14 @@ async function detail(id){
   const availableStatuses=isAppeal?['open','reviewing']:reviewStatuses;
   $('reportDetail').innerHTML=`<h2>${esc(types[report.category]||report.category)}</h2>
    <p class="muted">${esc(report.id)}</p>
-   <p>Submitted by ${esc(report.reporter||'Guest or deleted account')}${report.subject?`<br>Reported user: ${esc(report.subject)}`:''}</p>
+   <p>Reporter: ${esc(report.reporter||'Guest or deleted account')}${report.subject?`<br>Reported user: ${esc(report.subject)}`:''}</p>
    ${report.subject?'<button type="button" id="findReportedUser">Find reported user</button>':''}
    ${report.ban_id?'<button type="button" id="findAppealedBan">View ban</button>':''}
    <h3>Details</h3><pre>${esc(report.details)}</pre>
-   ${report.evidence?`<h3>Message evidence</h3><pre>${esc(JSON.stringify(report.evidence,null,2))}</pre>`:''}
+   ${report.evidence?`<h3>Message evidence</h3>
+    <p>Message sender: ${esc(report.evidence.sender||'Unverified')}<br>Message recipient: ${esc(report.evidence.recipient||'Unverified')}</p>
+    ${report.evidence.sender!==report.subject||!report.evidence.sender||report.evidence.recipient!==report.reporter?`<p class="error">Message attribution does not match the report or cannot be verified. Review independently before taking action.</p>`:''}
+    <pre>${esc(JSON.stringify(report.evidence,null,2))}</pre>`:''}
    ${appeal?'':`<form id="reviewForm">
     <label class="label" for="reviewStatus">Status</label>
     <select id="reviewStatus">${availableStatuses.map(item=>`<option ${item===report.status?'selected':''}>${item}</option>`).join('')}</select>
@@ -252,14 +255,24 @@ $('nextReports').onclick=()=>{page++;list();};
 try{
  const config=await fetch('/api/config').then(response=>response.json());
  if(!config.supabaseUrl||!config.supabaseKey)throw Error('Accounts unavailable.');
+ const fenceKey='sb-'+new URL(config.supabaseUrl).hostname.split('.')[0]+'-auth-token-local-signout';
+ const fence=()=>{try{return localStorage.getItem(fenceKey);}catch{return null;}};
+ const initialFence=fence();
+ sessionEnded=()=>fence()!==initialFence;
+ window.addEventListener('storage',event=>{
+  if(event.key!==fenceKey||!sessionEnded())return;
+  accountId=null;
+  lock('Signed out. Sign in on the Bible site to continue.');
+  void client.auth.dispose?.();
+ });
  client=createBrowserClient(config.supabaseUrl,config.supabaseKey,{
   cookies:{
    getAll:()=>parseCookieHeader(document.cookie),
-   setAll:items=>{for(const {name,value,options}of items)document.cookie=serializeCookieHeader(name,value,persistentCookieOptions(options,location.protocol==='https:'));}
+   setAll:items=>{if(sessionEnded())return;for(const {name,value,options}of items)document.cookie=serializeCookieHeader(name,value,persistentCookieOptions(options,location.protocol==='https:'));}
   }
  });
  client.auth.onAuthStateChange((event,session)=>{
-  if(!session){accountId=null;lock('Signed out. Sign in on the Bible site to continue.');}
+  if(!session||sessionEnded()){accountId=null;lock('Signed out. Sign in on the Bible site to continue.');}
   else if(accountId&&accountId!==session.user.id){accountId=session.user.id;lock('Account changed. Refresh to verify admin access.');}
   else accountId=session.user.id;
  });

@@ -280,3 +280,48 @@ test('translator note markers group matching notes without changing verse text o
   assert.equal(doc.querySelector('.translator-notes img'),null);
  });
 });
+
+test('large multibyte notebooks export as independently importable parts',async()=>{
+ await reader('',async(evaluate,doc,win)=>{
+  win.TextEncoder=TextEncoder;
+  const parts=evaluate(`
+   const notes=Object.fromEntries(Array.from({length:9},(_,i)=>['JHN.1.'+(i+1),{
+    book:'JHN',bookName:'John',chapter:1,verse:i+1,text:'文'.repeat(190000),updatedAt:'2026-11-06'
+   }]));
+   const highlights={'JHN.1.3':true};
+   notebookBackupParts(notes,highlights,'2026-11-06');
+  `);
+  assert.ok(parts.length>1);
+  evaluate('notebook()');
+  for(const part of parts){
+   const input=doc.getElementById('importFile');
+   const size=Buffer.byteLength(part);
+   assert.ok(size<=5_000_000);
+   Object.defineProperty(input,'files',{value:[{size,text:async()=>part}]});
+   await input.onchange({target:input});
+  }
+  assert.equal(evaluate('Object.keys(state.notes).length'),9);
+  assert.equal(evaluate("state.notes['JHN.1.9'].text.length"),190000);
+  assert.equal(evaluate("state.highlights['JHN.1.3']"),true);
+ });
+});
+
+test('phone notebook opens the editor for a single-verse note and a range',async()=>{
+ await reader('',async(evaluate,doc,win)=>{
+  await evaluate(`
+   state.books=[{id:'JHN',name:'John',numberOfChapters:21}];
+   state.notes={'JHN.1.2':{book:'JHN',bookName:'John',chapter:1,verse:2,text:'Single'},
+    'JHN.1.3-4':{book:'JHN',bookName:'John',chapter:1,verse:3,endVerse:4,text:'Range'}};
+   api=async()=>({translation:{id:'BSB',name:'Berean'},chapter:{content:[2,3,4].map(number=>({type:'verse',number,content:['Verse']}))}});
+   window.matchMedia=()=>({matches:false});
+  `);
+  let opens=0;
+  doc.addEventListener('open-mobile-study',()=>opens++);
+  for(const [key,value]of [['JHN.1.2','Single'],['JHN.1.3-4','Range']]){
+   evaluate('notebook()');
+   await doc.querySelector('[data-note="'+key+'"]').onclick();
+   assert.equal(doc.getElementById('noteText').value,value);
+  }
+  assert.equal(opens,2);
+ });
+});

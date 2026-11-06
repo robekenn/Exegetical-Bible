@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseBibleHTML,apiBibleResource} from '../lib/api-bible.js';
-import handler from '../api/bible.js';
+import {createBibleHandler} from '../api/bible.js';
 import {JSDOM} from 'jsdom';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
@@ -18,7 +18,8 @@ test('API.Bible catalog and restricted chapter route preserve attribution, repor
   const chapter=await apiBibleResource(`AB_${id}/JHN/1.json`);assert.equal(chapter.translation.licenseNotice,'Fixture copyright');assert.equal(chapter.fumsToken,'synthetic-view-token');assert.equal(chapter.chapter.content[0].content[0],'Synthetic fixture.');
   const before=calls.length;await assert.rejects(apiBibleResource('AB_bbbbbbbbbbbbbbbb-01/JHN/1.json'),{status:404});assert.equal(calls.length,before);
   await assert.rejects(apiBibleResource(`AB_${id}/JHN/2.json`),{status:404});assert.equal(calls.filter(x=>x.includes('/chapters/')).length,1);
-  let headers={},body,status;await handler({method:'GET',query:{path:`AB_${id}/JHN/1.json`}},{setHeader(k,v){headers[k]=v;},status(s){status=s;return this;},json(d){body=d;}});assert.equal(status,200);assert.equal(headers['Cache-Control'],'private, no-store');assert.equal(body.fumsToken,'synthetic-view-token');
+  const budgetCalls=[];const handler=createBibleHandler(()=>async provider=>budgetCalls.push(provider));
+  let headers={},body,status;await handler({method:'GET',query:{path:`AB_${id}/JHN/1.json`}},{setHeader(k,v){headers[k]=v;},status(s){status=s;return this;},json(d){body=d;}});assert.equal(status,200);assert.equal(headers['Cache-Control'],'private, no-store');assert.equal(body.fumsToken,'synthetic-view-token');assert.deepEqual(budgetCalls,['api-bible','api-bible']);
   process.env.API_BIBLE_KEY='rejected-fixture';global.fetch=async()=>({ok:false,status:403});await assert.rejects(apiBibleResource('available_api_bible.json'),e=>e.status===503&&!e.message.includes('rejected-fixture'));
   delete process.env.API_BIBLE_KEY;await assert.rejects(apiBibleResource('available_api_bible.json'),{status:503});
  }finally{global.fetch=originalFetch;if(originalKey===undefined)delete process.env.API_BIBLE_KEY;else process.env.API_BIBLE_KEY=originalKey;}
