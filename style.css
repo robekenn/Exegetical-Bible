@@ -361,3 +361,5 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 @media (max-width: 760px) {
  #closeSidePanels { display: none; }
 }
+
+.verse, .notebook-highlight { touch-action: manipulation; }
