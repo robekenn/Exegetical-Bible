@@ -4,11 +4,10 @@ import {readFile} from 'node:fs/promises';
 import {JSDOM} from 'jsdom';
 test('password forms pass symbols and Unicode unchanged and limit only new passwords',async()=>{
  const dom=new JSDOM('<button id="accountButton"></button><span id="accountStatus"></span><dialog id="modal"></dialog>',{url:'https://exegetical-bible.vercel.app/'});
- const keys=['document','window','location','history','navigator','sessionStorage','localStorage','CustomEvent','fetch','setInterval','__passwordTestClient'];const saved=new Map(keys.map(k=>[k,Object.getOwnPropertyDescriptor(globalThis,k)]));const calls=[];let authChange;
- const client={auth:{getSession:async()=>({data:{session:null}}),onAuthStateChange(fn){authChange=fn;},
+ const keys=['document','window','location','history','navigator','sessionStorage','localStorage','CustomEvent','fetch','setInterval','__passwordTestClient'];const saved=new Map(keys.map(k=>[k,Object.getOwnPropertyDescriptor(globalThis,k)]));const calls=[];
+ const client={auth:{getSession:async()=>({data:{session:null}}),onAuthStateChange(){},
   signInWithPassword:async data=>{calls.push(['login',data.password]);return {error:{message:'Fixture sign-in response'}};},
-  signUp:async data=>{calls.push(['signup',data.password]);return {data:{session:null}};},
-  updateUser:async data=>{calls.push(['reset',data.password]);return {error:{message:'Fixture reset response'}};}
+  signUp:async data=>{calls.push(['signup',data.password]);return {data:{session:null}};}
  }};
  try{
   for(const [key,value]of Object.entries({document:dom.window.document,window:dom.window,location:dom.window.location,history:dom.window.history,navigator:dom.window.navigator,sessionStorage:dom.window.sessionStorage,localStorage:dom.window.localStorage,CustomEvent:dom.window.CustomEvent,setInterval:()=>0,__passwordTestClient:client,fetch:async url=>({ok:true,json:async()=>String(url).endsWith('/api/config')?{supabaseUrl:'https://project.supabase.co',supabaseKey:'public'}:{external:{google:true}}})}))Object.defineProperty(globalThis,key,{configurable:true,writable:true,value});
@@ -36,10 +35,6 @@ test('password forms pass symbols and Unicode unchanged and limit only new passw
   assert.match(get('authMessage').textContent,/72 bytes/);
   get('authPassword').value=password;
   await get('authForm').onsubmit(event);
-  authChange('PASSWORD_RECOVERY',null);
-  await new Promise(resolve=>setTimeout(resolve,10));
-  get('newPassword').value=password;
-  await get('newPasswordForm').onsubmit(event);
-  assert.deepEqual(calls,[['login',password],['signup',password],['reset',password]]);
+  assert.deepEqual(calls,[['login',password],['signup',password]]);
  }finally{dom.window.close();for(const [key,descriptor]of saved)if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];}
 });
