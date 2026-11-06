@@ -24,6 +24,14 @@ test('phone navigation preserves drafts, opens study, and chooses a chapter with
  assert.equal(verseQuery,'be still and know');
  assert.equal(document.getElementById('mobileBookGrid').textContent,'Verse matches');
  assert.equal(document.getElementById('mobileBookSearch'),unified);
+ unified.value='John';
+ unified.dispatchEvent(new w.Event('input'));
+ document.getElementById('mobileBookGrid').querySelector('.passage-search-result').click();
+ assert.equal(verseQuery,'John');
+ unified.value='Jn 3:16–18';
+ unified.dispatchEvent(new w.Event('input'));
+ document.getElementById('mobileSearchPassage').click();
+ assert.deepEqual(navigated,['JHN',3,16,18]);
  await new Promise(r=>setImmediate(r));dom.window.close();
 });
 

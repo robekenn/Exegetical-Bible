@@ -8,6 +8,15 @@ test('passage search handles abbreviations, numbered books, chapter limits and u
  for(const [q,book,chapter,verse]of [['John 3:16','JHN',3,16],['jn3:16','JHN',3,16],['Psalm 23','PSA',23,1],['1 Cor 13:4','1CO',13,4],['First John 2:1','1JN',2,1],['Romans8','ROM',8,1]])assert.deepEqual(Object.values(searchPassage(q,books).target).slice(0,3),[book,chapter,verse]);
  assert.equal(searchPassage('John',books).target,undefined);assert.equal(searchPassage('gen',books).books[0].id,'GEN');assert.match(searchPassage('John 22',books).error,/21 chapters/);assert.match(searchPassage('John 0',books).error,/Choose 1/);assert.match(searchPassage('John 3:0',books).error,/verse number/);assert.match(searchPassage('Matthew 3',books).error,/not found/);assert.equal(searchPassage('<script>alert(1)</script>',books).books.length,0);
 });
+test('reference search accepts ranges and single-chapter shorthand and reports invalid endpoints',()=>{
+ const editions=[...books,{id:'JUD',name:'Jude',numberOfChapters:1}];
+ for(const q of ['John 3:16-18','Jn3:16–18','John 3:16 — 18']){
+  assert.deepEqual(searchPassage(q,editions).target,{book:'JHN',chapter:3,verse:16,label:'John 3:16–18',endVerse:18});
+ }
+ assert.deepEqual(searchPassage('Jude 5',editions).target,{book:'JUD',chapter:1,verse:5,label:'Jude 1:5'});
+ for(const q of ['John 3:18-16','John 3:16-','John 3:16-1000','John 3:16-foo'])assert.match(searchPassage(q,editions).error,/ending verse/);
+ assert.match(searchPassage('John 3:16–4:2',editions).error,/within one chapter/);
+});
 test('sidebar opens chapter choices without navigating and passage navigation requires an explicit action',async()=>{
  const dom=new JSDOM(await readFile(new URL('../index.html',import.meta.url),'utf8'),{url:'https://example.test/'});dom.window.HTMLElement.prototype.scrollIntoView=()=>{};Object.assign(globalThis,{document:dom.window.document,matchMedia:()=>({matches:false})});let destination,verseQuery;const state={books,book:'JHN',chapter:1,verse:1,translation:'BSB',testament:'new'};
  const sidebar=setupBookSidebar({state,esc:s=>String(s).replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;'),navigate:async(...args)=>destination=args,toast(){},openVerseSearch:(query,root)=>{verseQuery=query;root.textContent="Verse matches";}});sidebar.render();
@@ -24,5 +33,15 @@ test('sidebar opens chapter choices without navigating and passage navigation re
  document.getElementById('clearBookSearch').click();
  assert.equal(input.value,'');
  assert.equal(document.querySelector('[data-book="ROM"]').getAttribute('aria-expanded'),'true');
+ input.value='John 3:16–18';
+ input.dispatchEvent(new dom.window.Event('input'));
+ document.getElementById('sidebarSearchResult').click();
+ assert.deepEqual(destination,['JHN',3,16,18]);
+ input.value='John';
+ input.dispatchEvent(new dom.window.Event('input'));
+ document.getElementById('submitBookSearch').click();
+ assert.ok(document.querySelector('[data-side-chapter]'));
+ document.querySelector('.passage-search-result').click();
+ assert.equal(verseQuery,'John');
  dom.window.close();
 });

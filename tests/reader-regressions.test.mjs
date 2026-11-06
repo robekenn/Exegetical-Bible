@@ -168,3 +168,24 @@ test('reader muted text meets 4.5:1 contrast on shared light and dark surfaces',
   }
  }
 });
+
+test('shared passage URLs round-trip their range and reveal the first verse',async()=>{
+ const path='?book=PSA&chapter=119&verse=105&endVerse=107&translation=BSB';
+ await reader(path,async(evaluate,doc,win)=>{
+  const revealed=[];
+  win.HTMLElement.prototype.scrollIntoView=function(options){revealed.push([this.dataset.verse,options.block]);};
+  await evaluate(`
+   state.books=[{id:'PSA',name:'Psalms',numberOfChapters:150}];
+   state.tab='notes';
+   const result={translation:{id:'BSB',name:'Berean'},chapter:{content:Array.from({length:110},(_,i)=>({type:'verse',number:i+1,content:['Verse']}))}};
+   api=async()=>result;
+   loadChapter(linkedRange,result,false,true);
+  `);
+  assert.equal(doc.getElementById('studyRef').textContent,'Psalms 119:105–107');
+  assert.deepEqual(revealed,[['105','center']]);
+  assert.equal(win.location.search,path);
+  await evaluate("navigate('PSA',119,108)");
+  assert.equal(new URL(win.location.href).searchParams.has('endVerse'),false);
+  assert.deepEqual(revealed.at(-1),['108','center']);
+ });
+});
