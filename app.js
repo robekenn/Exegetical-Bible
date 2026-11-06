@@ -8,7 +8,7 @@ import {createAccount} from './account.js';
 let account=null;
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const flatten=v=>typeof v==='string'?v:Array.isArray(v)?v.map(flatten).join(' '):v?.text??(v?.content?flatten(v.content):'');
+const flatten=v=>typeof v==='string'?v:Array.isArray(v)?v.filter(part=>part?.noteId===undefined).map(flatten).join(' '):v?.text??(v?.content?flatten(v.content):'');
 const inlineVerse=content=>flatten(content).replace(/\s*[\r\n]+\s*/g,' ').trim();
 const cache=new Map();
 async function api(path){if(!path.startsWith('ESV/')&&!path.startsWith('AB_')&&path!=='available_api_bible.json'&&cache.has(path))return cache.get(path);const r=await fetch('/api/bible?path='+encodeURIComponent(path),{signal:AbortSignal.timeout(20000)});const d=await r.json();if(!r.ok){const error=Error(d.error||'Unable to load this resource.');error.status=r.status;throw error;}if(!path.startsWith('ESV/')&&!path.startsWith('AB_')&&path!=='available_api_bible.json')cache.set(path,d);return d;}
@@ -177,15 +177,57 @@ function updateVerseSelection(){
 }
 
 function safeURL(s){try{const u=new URL(s);return ['https:','http:'].includes(u.protocol)?esc(u.href):'#';}catch{return '#';}}
+function translatorNotes(chapter){
+ const byId=new Map(),byVerse=new Map();
+ for(const note of Array.isArray(chapter.footnotes)?chapter.footnotes:[]){
+  if(!Number.isInteger(note?.noteId)||typeof note.text!=='string'||!note.text.trim())continue;
+  byId.set(note.noteId,note.text.trim());
+  const ref=note.reference;
+  if(ref?.chapter===chapter.number&&Number.isInteger(ref.verse)){
+   if(!byVerse.has(ref.verse))byVerse.set(ref.verse,[]);
+   byVerse.get(ref.verse).push(note.noteId);
+  }
+ }
+ return verse=>{
+  const inline=Array.isArray(verse.content)?verse.content.map(part=>part?.noteId):[];
+  return [...new Set([...inline,...(byVerse.get(verse.number)||[])])].map(id=>byId.get(id)).filter(Boolean);
+ };
+}
+
+function openTranslatorNotes(verse,notes){
+ const edition=state.data.translation;
+ const label=`${book()?.name||state.book} ${state.chapter}:${verse}`;
+ const source=edition.licenseUrl||edition.website;
+ modal('Translator notes',`<section class="translator-notes">
+  <h3>${esc(label)}</h3>
+  <p class="muted">${esc(edition.name||edition.shortName||state.translation)}</p>
+  <ol>${notes.map(text=>`<li>${esc(text)}</li>`).join('')}</ol>
+  ${source||edition.licenseNotice?`<p class="attribution">${source?`<a href="${safeURL(source)}" target="_blank" rel="noopener noreferrer">Translation source &amp; license ↗</a>`:''}${edition.licenseNotice?'<br>'+esc(flatten(edition.licenseNotice)):''}</p>`:''}
+ </section>`);
+}
+
 function renderChapter(){
  if(!state.data)return;
  const starts=noteStarts();
+ const notesFor=translatorNotes(state.data.chapter);
+ const notesByVerse=new Map();
  $('chapterText').innerHTML=state.data.chapter.content.map(v=>{
   if(v.type==='heading')return `<h3>${esc(flatten(v.content))}</h3>`;
   if(v.type!=='verse')return '';
   const k=`${state.book}.${state.chapter}.${v.number}`;
-  return `<button type="button" class="verse ${state.highlights[k]?'highlighted':''}" data-verse="${v.number}" aria-label="${esc(book()?.name||state.book)} ${state.chapter}:${v.number}" aria-keyshortcuts="Shift+Enter"><sup>${v.number}</sup>${esc(flatten(v.content))}${starts.has(k)?'<span class="note-dot" aria-label="Has note">✎</span>':''}</button>`;
+  const verse=`<button type="button" class="verse ${state.highlights[k]?'highlighted':''}" data-verse="${v.number}" aria-label="${esc(book()?.name||state.book)} ${state.chapter}:${v.number}" aria-keyshortcuts="Shift+Enter"><sup>${v.number}</sup>${esc(flatten(v.content))}${starts.has(k)?'<span class="note-dot" aria-label="Has note">✎</span>':''}</button>`;
+  const notes=notesFor(v);
+  if(!notes.length)return verse;
+  notesByVerse.set(v.number,notes);
+  return `<div class="verse-with-translator-notes">${verse}<button type="button" class="translator-note-marker" data-translator-notes="${v.number}" aria-haspopup="dialog" aria-label="${notes.length} translator ${notes.length===1?'note':'notes'} for ${esc(book()?.name||state.book)} ${state.chapter}:${v.number}"><span aria-hidden="true">†${notes.length>1?`<small>${notes.length}</small>`:''}</span></button></div>`;
  }).join('');
+ $('chapterText').querySelectorAll('[data-translator-notes]').forEach(button=>{
+  button.onclick=()=>{
+   resetVerseTap();
+   const verse=Number(button.dataset.translatorNotes);
+   openTranslatorNotes(verse,notesByVerse.get(verse));
+  };
+ });
  highlightTools?.decorate();
  updateVerseSelection();
 }
