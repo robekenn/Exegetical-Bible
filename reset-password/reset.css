@@ -1,0 +1,14 @@
+.password-reset {
+ width: min(34rem, calc(100% - 2rem));
+ margin: clamp(2rem, 10vh, 6rem) auto;
+ padding: clamp(1.25rem, 5vw, 2.5rem);
+ background: var(--paper);
+ border: 1px solid var(--line);
+ border-radius: 1rem;
+}
+.password-reset h1 { font: 2rem var(--serif); margin: 1.5rem 0 1rem; }
+.password-reset form { margin: 1rem 0; }
+.password-reset input { font-size: 1rem; }
+.password-reset button { min-height: 44px; }
+.password-reset .primary { background: var(--accent); color: var(--paper); }
+.password-reset .reset-back { display: inline-block; margin-top: 1rem; color: var(--accent); }
