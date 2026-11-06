@@ -8,8 +8,10 @@ console.log('Built static app and bundled Supabase client.');
 
 await import('./legal.mjs');
 await import('./feedback-pages.mjs');
-await mkdir('dist/changelog',{recursive:true});
-await copyFile('changelog/index.html','dist/changelog/index.html');
+for(const page of ['changelog','about']){
+ await mkdir('dist/'+page,{recursive:true});
+ await copyFile(page+'/index.html','dist/'+page+'/index.html');
+}
 
 
 await mkdir('dist/admin',{recursive:true});
