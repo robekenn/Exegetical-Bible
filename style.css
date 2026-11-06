@@ -393,3 +393,16 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
  .study .tabs{margin-inline:6px;gap:1px}
  .study .tabs button{padding-inline:1px;font-size:10px}
 }
+
+.verse-with-translator-notes{position:relative}
+.verse-with-translator-notes .verse{padding-inline-end:52px;min-height:48px}
+.translator-note-marker{
+ position:absolute;inset-block-start:2px;inset-inline-end:0;
+ width:44px;min-height:44px;display:grid;place-items:center;
+ border-radius:8px;color:var(--accent);font-size:17px;
+}
+.translator-note-marker:hover,.translator-note-marker:focus-visible{background:var(--soft)}
+.translator-note-marker small{font-size:10px;margin-inline-start:2px}
+.translator-notes h3{margin-block:0 4px}
+.translator-notes ol{padding-inline-start:1.5em}
+.translator-notes li{padding-inline-start:4px;margin-block:10px;white-space:pre-line;overflow-wrap:anywhere}

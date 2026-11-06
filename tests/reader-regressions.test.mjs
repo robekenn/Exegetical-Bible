@@ -250,3 +250,33 @@ test('related references preview without navigation and return to the source ran
   assert.equal(doc.getElementById('studyRef').textContent,'Psalms 119:105–106');
  });
 });
+
+test('translator note markers group matching notes without changing verse text or selection',async()=>{
+ await reader('?book=JHN&chapter=1&verse=14&translation=BSB',async(evaluate,doc)=>{
+  evaluate(`
+   state.books=[{id:'JHN',name:'John'}];
+   state.data={translation:{name:'Berean Standard Bible',licenseUrl:'https://berean.bible/'},chapter:{number:1,
+    content:[
+     {type:'verse',number:13,content:['Unannotated verse.']},
+     {type:'verse',number:14,content:['Verse text',{noteId:0},'continues.',{noteId:1},{noteId:0}]}
+    ],
+    footnotes:[
+     {noteId:0,text:'Alternate wording'},
+     {noteId:1,text:'<img src=x onerror=alert(1)>',reference:{chapter:1,verse:14}},
+     {noteId:2,text:'Reference-only note',reference:{chapter:1,verse:14}}
+    ]
+   }};
+   renderChapter();
+  `);
+  const verse=doc.querySelector('[data-verse="14"]');
+  const marker=doc.querySelector('[data-translator-notes="14"]');
+  assert.equal(doc.querySelectorAll('[data-translator-notes]').length,1);
+  assert.equal(marker.getAttribute('aria-label'),'3 translator notes for John 1:14');
+  assert.equal(evaluate('passageText(verses().filter(v=>v.number===14))'),'Verse text continues.');
+  marker.click();
+  assert.equal(verse.getAttribute('aria-pressed'),'true');
+  assert.match(doc.getElementById('modalBody').textContent,/Berean Standard Bible/);
+  assert.deepEqual([...doc.querySelectorAll('.translator-notes li')].map(li=>li.textContent),['Alternate wording','<img src=x onerror=alert(1)>','Reference-only note']);
+  assert.equal(doc.querySelector('.translator-notes img'),null);
+ });
+});
