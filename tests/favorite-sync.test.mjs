@@ -26,12 +26,13 @@ test('favorites migrate and sync across browser sessions without stale reading s
   async function openBrowser(cache){
    let ids=[];
    client={
-    auth:{getSession:async()=>({data:{session:session('reader')}}),onAuthStateChange(callback){authChanged=callback;}},
+    auth:{getUser:async()=>({error:null}),getSession:async()=>({data:{session:session('reader')}}),onAuthStateChange(callback){authChanged=callback;}},
     from(table){
      return {
       select(){return this;},
       eq(_,id){this.id=id;return this;},
       order(){return this;},
+      then(resolve){resolve({data:[]});},
       range:async()=>({data:[]}),
       async maybeSingle(){return {data:{settings:structuredClone(cloud.get(this.id))}};},
       async upsert({user_id,settings}){
