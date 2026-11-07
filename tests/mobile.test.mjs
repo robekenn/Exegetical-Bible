@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {JSDOM} from 'jsdom';
 import {readFile} from 'node:fs/promises';
-import {setupMobile} from '../mobile.js';
+import {setupMobile,setupMobileViewport} from '../mobile.js';
 test('phone navigation preserves drafts, opens study, and chooses a chapter without reloading',async()=>{
  const html=await readFile(new URL('../index.html',import.meta.url),'utf8');const dom=new JSDOM(html,{url:'https://example.test/'});const w=dom.window;w.scrollTo=()=>{};
  Object.assign(globalThis,{window:w,document:w.document,MutationObserver:w.MutationObserver,CustomEvent:w.CustomEvent,matchMedia:()=>({matches:true,addEventListener(){}})});
@@ -67,4 +67,44 @@ test('closing Study for navigation unlocks the reader before the verse jump',asy
   await Promise.resolve();
   assert.deepEqual(jumps,[240,1200]);
  }finally{controller.destroy();dom.window.close();}
+});
+
+test('phone keyboard changes fit the dialog and reveal focus within its scroll container',()=>{
+ const dom=new JSDOM('<dialog open><div style="overflow-y:auto"><textarea></textarea></div></dialog>');
+ const {window:w}=dom,d=w.document,style=d.documentElement.style;
+ const viewport=new w.EventTarget();
+ Object.assign(viewport,{height:800,offsetTop:0,scale:1});
+ const frames=[];
+ const browser={visualViewport:viewport,innerHeight:800,requestAnimationFrame:fn=>frames.push(fn),getComputedStyle:w.getComputedStyle};
+ const phone=new w.EventTarget();
+ phone.matches=true;
+ const field=d.querySelector('textarea'),scroller=field.parentElement;
+ Object.defineProperties(scroller,{clientHeight:{value:300},scrollHeight:{value:650}});
+ scroller.getBoundingClientRect=()=>({top:80,bottom:550});
+ field.getBoundingClientRect=()=>({top:400-scroller.scrollTop,bottom:460-scroller.scrollTop,height:60});
+ try{
+  setupMobileViewport(browser,d,phone);
+  frames.shift()();
+  field.focus();
+  viewport.height=375;
+  viewport.offsetTop=25;
+  viewport.dispatchEvent(new w.Event('resize'));
+  viewport.dispatchEvent(new w.Event('scroll'));
+  assert.equal(frames.length,1);
+  frames.shift()();
+  assert.equal(style.getPropertyValue('--mobile-viewport-height'),'375px');
+  assert.equal(style.getPropertyValue('--mobile-viewport-top'),'25px');
+  assert.equal(style.getPropertyValue('--mobile-viewport-bottom'),'400px');
+  assert.equal(scroller.scrollTop,68);
+  viewport.scale=1.5;
+  viewport.dispatchEvent(new w.Event('resize'));
+  frames.shift()();
+  assert.equal(style.getPropertyValue('--mobile-viewport-height'),'');
+  assert.equal(scroller.scrollTop,68);
+  Object.assign(viewport,{height:800,offsetTop:0,scale:1});
+  viewport.dispatchEvent(new w.Event('resize'));
+  frames.shift()();
+  assert.equal(style.getPropertyValue('--mobile-viewport-height'),'800px');
+  assert.equal(scroller.scrollTop,68);
+ }finally{dom.window.close();}
 });

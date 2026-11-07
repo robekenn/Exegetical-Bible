@@ -9,7 +9,7 @@ export function setupMobile({state,modal,esc,navigate,toast,openVerseSearch,refr
  document.addEventListener('open-mobile-study',openStudy);document.addEventListener('close-mobile-study',()=>{closeStudy(false);refreshForeground();});document.addEventListener('study-modal-open',()=>{if(phone.matches)closeStudy(false);});$('modal').addEventListener('close',()=>active(document.body.classList.contains('mobile-study-open')?'study':'read'));
  sheet.addEventListener('keydown',e=>{if(!phone.matches||!document.body.classList.contains('mobile-study-open'))return;if(e.key==='Escape'){e.preventDefault();closeStudy();}if(e.key==='Tab'){const items=[...sheet.querySelectorAll('button:not(:disabled),select,input,textarea,a[href]')].filter(e=>e.getClientRects().length);const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}});
  phone.addEventListener('change',()=>closeStudy(false));
- function keyboardSize(){if(window.visualViewport)document.documentElement.style.setProperty('--mobile-viewport',Math.round(window.visualViewport.height)+'px');}window.visualViewport?.addEventListener('resize',keyboardSize);keyboardSize();
+ setupMobileViewport(window,document,phone);
  $('mobilePassageButton').onclick=()=>{if(!state.books.length)return toast('The Bible is still opening. Try again in a moment.');closeStudy(false);modal('Choose a passage',`<p class="muted">${esc($('translationName').textContent)}</p><button id="pickerCurrentChapter" class="picker-current-chapter">Choose a chapter in ${esc(state.books.find(b=>b.id===state.book)?.name||state.book)} →</button><label class="label" for="mobileBookSearch">Search the Bible</label><div class="mobile-bible-search"><input id="mobileBookSearch" type="search" enterkeyhint="search" class="full-input" placeholder="Book, reference, or words" autocomplete="off" spellcheck="false"><button id="submitMobileBibleSearch" type="button" aria-label="Search">→</button></div><p id="mobileSearchStatus" class="muted" role="status"></p><div class="mobile-testament-filter"><button data-mobile-testament="all" aria-pressed="true">All books</button><button data-mobile-testament="old" aria-pressed="false">Old Testament</button><button data-mobile-testament="new" aria-pressed="false">New Testament</button></div><div id="mobileBookGrid" class="mobile-book-grid"></div>`);$('pickerCurrentChapter').onclick=()=>chapters(state.book);let testament='all',cancelVerseSearch;function jump(target){$('modal').close();return openSearchPassage(navigate,target);}function searchWords(){
  cancelVerseSearch?.();
  $('mobileSearchStatus').textContent='';
@@ -30,4 +30,57 @@ $('mobileBookSearch').oninput=render;document.querySelectorAll('[data-mobile-tes
  function chapters(bookId){const book=state.books.find(b=>b.id===bookId);modal(book.name,`<button id="mobileBackToBooks" class="mobile-back">← All books</button><p class="muted">Choose a chapter</p><div class="mobile-chapter-grid">${Array.from({length:book.numberOfChapters},(_,i)=>`<button data-mobile-chapter="${i+1}" aria-current="${state.book===bookId&&state.chapter===i+1?'true':'false'}" class="${state.book===bookId&&state.chapter===i+1?'current':''}">${i+1}</button>`).join('')}</div>`);$('mobileBackToBooks').onclick=()=>$('mobilePassageButton').click();document.querySelectorAll('[data-mobile-chapter]').forEach(b=>b.onclick=()=>{$('modal').close();navigate(bookId,Number(b.dataset.mobileChapter));window.scrollTo({top:0,behavior:'smooth'});});}
  // Keep the passage button current without moving focus.
  const observe=new MutationObserver(()=>{$('mobilePassageButton').textContent=(state.books.find(b=>b.id===state.book)?.name||state.book)+' '+state.chapter+' ▾';});observe.observe($('chapterTitle'),{childList:true,subtree:true});
+}
+
+
+export function setupMobileViewport(win,doc,phone){
+ const viewport=win.visualViewport;
+ if(!viewport)return;
+ const style=doc.documentElement.style;
+ let pending=false;
+
+ function update(){
+  pending=false;
+  // Keep the browser's native pinch zoom behavior.
+  if(!phone.matches||viewport.scale>1.01){
+   for(const name of ['height','top','bottom'])style.removeProperty('--mobile-viewport-'+name);
+   return;
+  }
+  const top=Math.max(0,viewport.offsetTop);
+  const bottom=top+viewport.height;
+  style.setProperty('--mobile-viewport-height',Math.round(viewport.height)+'px');
+  style.setProperty('--mobile-viewport-top',Math.round(top)+'px');
+  style.setProperty('--mobile-viewport-bottom',Math.max(0,Math.round(win.innerHeight-bottom))+'px');
+
+  const field=doc.activeElement;
+  if(!field?.matches('textarea, select, input:not([type=checkbox],[type=radio],[type=file],[type=button],[type=submit],[type=range],[type=color])'))return;
+  const panel=field.closest('dialog[open], .mobile-study-open .study');
+  if(!panel)return;
+  // Reveal the control inside the foreground scroller without moving the reader.
+  for(let container=field.parentElement;container&&container!==panel;container=container.parentElement){
+   if(container.scrollHeight<=container.clientHeight||!['auto','scroll'].includes(win.getComputedStyle(container).overflowY))continue;
+   const bounds=container.getBoundingClientRect();
+   const visibleTop=Math.max(bounds.top,top)+8;
+   const visibleBottom=Math.min(bounds.bottom,bottom)-8;
+   if(visibleBottom<=visibleTop)continue;
+   const rect=field.getBoundingClientRect();
+   if(rect.top<visibleTop||rect.height>visibleBottom-visibleTop&&rect.top>visibleTop){
+    container.scrollTop+=rect.top-visibleTop;
+   }else if(rect.bottom>visibleBottom&&rect.height<=visibleBottom-visibleTop){
+    container.scrollTop+=rect.bottom-visibleBottom;
+   }
+  }
+ }
+
+ function schedule(){
+  if(pending)return;
+  pending=true;
+  win.requestAnimationFrame(update);
+ }
+
+ viewport.addEventListener('resize',schedule);
+ viewport.addEventListener('scroll',schedule);
+ doc.addEventListener('focusin',schedule);
+ phone.addEventListener('change',schedule);
+ schedule();
 }
