@@ -12,6 +12,7 @@ for(const page of ['changelog','about','reset-password']){
  await mkdir('dist/'+page,{recursive:true});
  await copyFile(page+'/index.html','dist/'+page+'/index.html');
 }
+await copyFile('about/creator-photo.webp','dist/about/creator-photo.webp');
 await copyFile('reset-password/reset.js','dist/reset-password/reset.js');
 await copyFile('reset-password/reset.css','dist/reset-password/reset.css');
 
