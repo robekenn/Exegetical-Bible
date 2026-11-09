@@ -1227,7 +1227,7 @@ function finishStartup(){
 async function start(){
  bookNavigation=setupBookSidebar({state,esc,navigate,toast,openVerseSearch});
  const foregroundScroll=setupForegroundScroll();
- highlightTools=setupPassageHighlights({state,save,renderChapter,isSelected:number=>!selectionCleared&&inRange(number),canEdit:()=>!account||account.canEdit(),toast});
+ highlightTools=setupPassageHighlights({state,save,renderChapter,getSelectedRange:()=>selectedRange,isSelected:number=>!selectionCleared&&inRange(number),canEdit:()=>!account||account.canEdit(),toast});
  streak=setupStreak({modal,toast,read:stored,write:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}},changed:()=>account?.preferencesChanged(),canRead:()=>Boolean(state.data)&&(!account||account.canEdit())});
  setupMobile({state,modal,esc,navigate,toast,openVerseSearch,refreshForeground:foregroundScroll.refresh});
  setupDesktopPanels();
