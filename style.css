@@ -254,8 +254,10 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 
 @media (min-width: 761px) {
  .workspace[data-books] {
-  --books-width: 225px;
-  --study-width: 300px;
+  --books-default: 225px;
+  --study-default: 300px;
+  --books-width: var(--books-default);
+  --study-width: var(--study-default);
   --books-column: var(--books-width);
   --study-column: var(--study-width);
   --panel-duration: 0ms;
@@ -265,6 +267,26 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
   transition: grid-template-columns var(--panel-motion);
  }
  .workspace[data-panel-motion] { --panel-duration: 220ms; }
+ .workspace[data-panel-resizing] { --panel-duration: 0ms; cursor: col-resize; user-select: none; }
+ .panel-resize {
+  grid-row: 1;
+  width: 10px;
+  z-index: 37;
+  cursor: col-resize;
+  touch-action: none;
+  position: relative;
+ }
+ .panel-resize-books { grid-column: 1; justify-self: end; }
+ .panel-resize-study { grid-column: 3; justify-self: start; }
+ .panel-resize::after {
+  content: '';
+  position: absolute;
+  inset: 45% 3px;
+  border-radius: 4px;
+  background: var(--accent);
+  opacity: .45;
+ }
+ .panel-resize:hover, .panel-resize:focus-visible { background: var(--soft); }
  .workspace[data-books="closed"] { --books-column: 0px; }
  .workspace[data-study="closed"] { --study-column: 0px; }
  .workspace[data-books] .sidebar,
@@ -323,17 +345,17 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
  .verse { scroll-margin-top: 84px; }
 }
 @media (min-width: 761px) and (max-width: 900px) {
- .workspace[data-books] { --books-width: 175px; }
- .workspace[data-books] { --study-width: 265px; }
+ .workspace[data-books] { --books-default: 175px; }
+ .workspace[data-books] { --study-default: 265px; }
  .reader-toolbar { padding-inline: 12px; }
 }
 @media (min-width: 1101px) {
- .workspace[data-books] { --books-width: 270px; }
- .workspace[data-books] { --study-width: 380px; }
+ .workspace[data-books] { --books-default: 270px; }
+ .workspace[data-books] { --study-default: 380px; }
 }
 @media (min-width: 1500px) {
- .workspace[data-books] { --books-width: 285px; }
- .workspace[data-books] { --study-width: 420px; }
+ .workspace[data-books] { --books-default: 285px; }
+ .workspace[data-books] { --study-default: 420px; }
 }
 
 @media (min-width: 761px) and (prefers-reduced-motion: reduce) {

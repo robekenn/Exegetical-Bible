@@ -634,12 +634,78 @@ function setupDesktopPanels(){
  const key='exegetical-desktop-panels';
  const saved=stored(key,{});
  const choices={books:saved.books,study:saved.study,previous:saved.previous};
+ const widths=saved.widths||{};
+ const minimum={books:160,study:230};
+ const handles={};
+ const applied={};
  const isOpen=panel=>typeof choices[panel]==='boolean'?choices[panel]:panel==='study'||wide.matches;
  const closeBoth=$('closeSidePanels');
  const controls={
   books:$('toggleBooksPanel'),
   study:$('toggleStudyPanel')
  };
+ function fitWidths(){
+  if(!desktop.matches)return;
+  const css=getComputedStyle(workspace);
+  const budget=Math.max(390,workspace.clientWidth-320);
+  let remaining=budget;
+  for(const panel of ['study','books']){
+   const other=panel==='books'?'study':'books';
+   const desired=Number.isFinite(widths[panel])?widths[panel]:parseFloat(css.getPropertyValue('--'+panel+'-default'));
+   const max=Math.max(minimum[panel],(panel==='books'?remaining:budget-(isOpen(other)?minimum[other]:0)));
+   applied[panel]=Math.min(max,Math.max(minimum[panel],desired||minimum[panel]));
+   workspace.style.setProperty('--'+panel+'-width',applied[panel]+'px');
+   if(isOpen(panel))remaining-=applied[panel];
+  }
+  for(const panel of Object.keys(handles)){
+   const other=panel==='books'?'study':'books';
+   handles[panel].setAttribute('aria-valuenow',applied[panel]);
+   handles[panel].setAttribute('aria-valuemax',budget-(isOpen(other)?applied[other]:0));
+  }
+ }
+ function resize(panel,width){
+  const max=Number(handles[panel].getAttribute('aria-valuemax'));
+  widths[panel]=Math.round(Math.max(minimum[panel],Math.min(max,width)));
+  fitWidths();
+ }
+ function persist(){
+  try{localStorage.setItem(key,JSON.stringify({...choices,widths}));}catch{}
+ }
+ for(const [panel,toggle] of Object.entries(controls)){
+  const handle=document.createElement('div');
+  handle.className='panel-resize panel-resize-'+panel;
+  handle.tabIndex=0;
+  handle.setAttribute('role','separator');
+  handle.setAttribute('aria-orientation','vertical');
+  handle.setAttribute('aria-controls',toggle.getAttribute('aria-controls'));
+  handle.setAttribute('aria-label','Resize '+(panel==='books'?'Books':'Study')+' panel');
+  handle.setAttribute('aria-valuemin',minimum[panel]);
+  handles[panel]=handle;
+  workspace.append(handle);
+  const direction=panel==='books'?1:-1;
+  let drag;
+  handle.onpointerdown=event=>{
+   if(event.button!==0||drag)return;
+   drag={id:event.pointerId,x:event.clientX,width:applied[panel]};
+   handle.setPointerCapture(event.pointerId);
+   workspace.dataset.panelResizing='';
+  };
+  handle.onpointermove=event=>{
+   if(drag?.id===event.pointerId)resize(panel,drag.width+direction*(event.clientX-drag.x));
+  };
+  handle.onlostpointercapture=()=>{
+   drag=null;
+   delete workspace.dataset.panelResizing;
+   persist();
+  };
+  handle.onkeydown=event=>{
+   if(!['ArrowLeft','ArrowRight'].includes(event.key))return;
+   event.preventDefault();
+   delete workspace.dataset.panelMotion;
+   resize(panel,applied[panel]+direction*(event.key==='ArrowRight'?16:-16));
+   persist();
+  };
+ }
  function render(){
   for(const [panel,toggle] of Object.entries(controls)){
    const expanded=isOpen(panel);
@@ -649,17 +715,19 @@ function setupDesktopPanels(){
    toggle.setAttribute('aria-expanded',String(expanded));
    toggle.setAttribute('aria-label',label);
    toggle.title=label;
+   handles[panel].hidden=!desktop.matches||!expanded;
   }
   const expanded=isOpen('books')||isOpen('study');
   const label=expanded?'Close side panels':'Reopen side panels';
   closeBoth.setAttribute('aria-expanded',String(expanded));
   closeBoth.setAttribute('aria-label',label);
   closeBoth.title=label;
+  fitWidths();
  }
  function change(next){
   workspace.dataset.panelMotion='';
   Object.assign(choices,next);
-  try{localStorage.setItem(key,JSON.stringify(choices));}catch{}
+  persist();
   render();
  }
  for(const [panel,toggle] of Object.entries(controls)){
@@ -676,6 +744,7 @@ function setupDesktopPanels(){
  };
  wide.addEventListener('change',render);
  desktop.addEventListener('change',render);
+ window.addEventListener('resize',fitWidths);
  render();
 }
 
