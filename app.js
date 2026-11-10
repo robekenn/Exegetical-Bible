@@ -1,4 +1,4 @@
-import {setupBookSidebar} from './book-navigation.js';
+import {setupBookSidebar,compareBibleReferences,testamentOf} from './book-navigation.js';
 import {setupForegroundScroll} from './foreground-scroll.js';
 import {setupPassageHighlights} from './passage-highlights.js';
 import {setupStreak} from './streak.js';
@@ -379,23 +379,32 @@ async function renderRelated(root,quote,passage,id){
   if(id!==studyId)return;
  }
  const bookName=(books,id)=>books.find(b=>b.id===id)?.name||id;
+ const relatedBookName=id=>currentBooks.find(book=>book.id===id)?.name||bookName(fallbackBooks||[],id);
+ const relatedBooks=[...new Set([...targets].sort(compareBibleReferences).map(target=>target.book))];
  root.innerHTML=quote+`<section class="related-passages" aria-label="Related passages">
   <h3>Related passages</h3>
   <p class="muted">Open a reference to preview it here. Verse numbering may vary by translation.</p>
+  ${targets.length?`<div class="related-filters">
+   <div class="related-filter-row"><label>Sort by <select id="relatedSort"><option value="relevance">Relevance</option><option value="book">Bible book order</option></select></label>
+   <button type="button" id="relatedReset">Reset filters</button></div>
+   <fieldset><legend>Testament</legend><label><input type="checkbox" data-related-testament="old"> Old</label> <label><input type="checkbox" data-related-testament="new"> New</label></fieldset>
+   <details><summary>Filter by book</summary><div class="related-book-options">${relatedBooks.map(book=>`<label><input type="checkbox" data-related-book="${esc(book)}"> ${esc(relatedBookName(book))}</label>`).join('')}</div></details>
+   <p id="relatedCount" class="muted" role="status"></p>
+  </div>`:''}
   <div id="relatedList"></div>
   <button type="button" id="relatedMore" hidden>Show more references</button>
-  <p class="attribution">Cross-references from <a href="https://www.openbible.info/labs/cross-references/" target="_blank" rel="noopener noreferrer">OpenBible.info</a> via AO Lab, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>. Results are filtered for your selection and ranked by source score.</p>
+  <p class="attribution">Cross-references from <a href="https://www.openbible.info/labs/cross-references/" target="_blank" rel="noopener noreferrer">OpenBible.info</a> via AO Lab, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>. Relevance uses the source dataset’s scores.</p>
  </section>`;
  const list=$('relatedList'),more=$('relatedMore');
  if(!targets.length){list.innerHTML='<p>No cross-references are available for this selection.</p>';return;}
- let shown=0;
+ let shown=0,filtered=targets;
  function showMore(){
   const start=shown;
-  for(const target of targets.slice(start,start+8)){
+  for(const target of filtered.slice(start,start+8)){
    const {book,chapter,verse,endVerse}=target;
    const row=document.createElement('details');
    row.className='related-reference';
-   row.innerHTML=`<summary>${esc(bookName(currentBooks.some(b=>b.id===book)?currentBooks:fallbackBooks||currentBooks,book))} ${chapter}:${comparisonRangeLabel(verse,endVerse)}</summary><div class="related-preview" aria-live="polite"></div>`;
+   row.innerHTML=`<summary>${esc(relatedBookName(book))} ${chapter}:${comparisonRangeLabel(verse,endVerse)}</summary><div class="related-preview" aria-live="polite"></div>`;
    list.append(row);
    const preview=row.querySelector('.related-preview');
    let loading=false,loaded=false;
@@ -445,11 +454,29 @@ async function renderRelated(root,quote,passage,id){
    row.ontoggle=()=>{if(row.open)load();};
   }
   shown=list.children.length;
-  more.hidden=shown>=targets.length;
+  more.hidden=shown>=filtered.length;
   if(start)list.children[start]?.querySelector('summary').focus();
  }
+ const filters=root.querySelector('.related-filters');
+ const sort=$('relatedSort');
+ function applyFilters(){
+  const selected=key=>new Set([...filters.querySelectorAll(`[data-related-${key}]:checked`)].map(input=>input.getAttribute('data-related-'+key)));
+  const books=selected('book'),testaments=selected('testament');
+  filtered=targets.filter(target=>(!books.size||books.has(target.book))&&(!testaments.size||testaments.has(testamentOf(target.book))));
+  if(sort.value==='book')filtered.sort(compareBibleReferences);
+  shown=0;
+  list.replaceChildren();
+  $('relatedCount').textContent=filtered.length?`${filtered.length} ${filtered.length===1?'reference':'references'}`:'No references match these filters.';
+  showMore();
+ }
+ filters.onchange=applyFilters;
+ $('relatedReset').onclick=()=>{
+  for(const input of filters.querySelectorAll('input'))input.checked=false;
+  sort.value='relevance';
+  applyFilters();
+ };
  more.onclick=showMore;
- showMore();
+ applyFilters();
 }
 
 async function renderStudy(){const id=++studyId;++wordId;const root=$('studyBody');$('studyRef').textContent=passageLabel();const passage=verses().filter(v=>inRange(v.number));if(!passage.length)return;
@@ -894,18 +921,22 @@ function openVerseSearch(query,root,beforeOpen=()=>{},testament='all'){
    <select class="full-input" data-search-edition>${supported.map(t=>`<option value="${esc(t.id)}"${t.id===edition.id?' selected':''}>${esc(t.shortName||t.id)} · ${esc(t.name)}</option>`).join('')}</select>
   </label>
   <p class="muted" role="status"></p>
+  <div class="button-row verse-search-pagination" data-search-pagination></div>
   <div data-search-results></div>
  </section>`;
  const panel=root.firstElementChild;
  const select=panel.querySelector('[data-search-edition]');
  const status=panel.querySelector('[role="status"]');
  const results=panel.querySelector('[data-search-results]');
+ const pagination=panel.querySelector('[data-search-pagination]');
+ status.tabIndex=-1;
  const dialog=panel.closest('dialog');
  const isCurrent=()=>panel.isConnected&&(!dialog||dialog.open);
  let controller,opening=false;
  function clearResults(){
   controller?.abort();
   results.replaceChildren();
+  pagination.replaceChildren();
   status.textContent='';
  }
  select.onchange=()=>run(1);
@@ -926,13 +957,14 @@ function openVerseSearch(query,root,beforeOpen=()=>{},testament='all'){
    if(isCurrent())status.textContent=error.message;
   }finally{opening=false;}
  }
- async function run(page){
+ async function run(page,moveFocus=false){
   const q=query.trim(),translation=select.value;
   if(q.length<2){status.textContent='Enter at least two characters.';return;}
   clearResults();
   const active=new AbortController();
   controller=active;
   status.textContent='Searching verses…';
+  if(moveFocus)status.focus();
   try{
    const params=new URLSearchParams({path:'search.json',q,translation,page:String(page),testament});
    const response=await fetch('/api/bible?'+params,{signal:AbortSignal.any([active.signal,AbortSignal.timeout(22000)])});
@@ -943,14 +975,13 @@ function openVerseSearch(query,root,beforeOpen=()=>{},testament='all'){
    status.textContent=hits.length?`Page ${page} · ${hits.length} ${hits.length===1?'result':'results'}`:data.hasMore?'No matches on this page. Try the next page.':'No matching verses on this page.';
    results.innerHTML=hits.map((hit,index)=>`<button type="button" class="verse-search-result" data-verse-result="${index}">
     <strong>${esc(hit.reference)}</strong>${hit.text?`<span dir="${data.textDirection==='rtl'?'rtl':'ltr'}">${esc(hit.text)}</span>`:''}
-   </button>`).join('')+(hits.length?`<p class="attribution"><a href="${safeURL(data.licenseUrl)}" target="_blank" rel="noopener noreferrer">Translation source & license ↗</a>${data.licenseNotice?'<br>'+esc(data.licenseNotice):''}</p>`:'')
-   +`<div class="button-row">${page>1?'<button type="button" data-search-previous>← Previous results</button>':''}${data.hasMore?'<button type="button" data-search-next>Next results →</button>':''}</div>`;
+   </button>`).join('')+(hits.length?`<p class="attribution"><a href="${safeURL(data.licenseUrl)}" target="_blank" rel="noopener noreferrer">Translation source & license ↗</a>${data.licenseNotice?'<br>'+esc(data.licenseNotice):''}</p>`:'');
+   pagination.innerHTML=`${page>1?'<button type="button" data-search-previous>← Previous results</button>':''}${data.hasMore?'<button type="button" data-search-next>Next results →</button>':''}`;
    results.querySelectorAll('[data-verse-result]').forEach(button=>button.onclick=()=>openResult(hits[Number(button.dataset.verseResult)],translation));
-   const previous=results.querySelector('[data-search-previous]');
-   const next=results.querySelector('[data-search-next]');
-   if(previous)previous.onclick=()=>run(page-1);
-   if(next)next.onclick=()=>run(page+1);
-   if(page>1)results.querySelector('[data-verse-result]')?.focus();
+   const previous=pagination.querySelector('[data-search-previous]');
+   const next=pagination.querySelector('[data-search-next]');
+   if(previous)previous.onclick=()=>run(page-1,true);
+   if(next)next.onclick=()=>run(page+1,true);
    if(hits.some(hit=>hit.text))reportBibleView(data);
   }catch(error){
    if(!active.signal.aborted&&isCurrent()){

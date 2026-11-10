@@ -437,3 +437,11 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 }
 
 @media(min-width:761px){#studySwipeGrip{display:none}}
+
+.related-filters{display:grid;gap:.55rem;margin-block:1rem}
+.related-filter-row{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.related-filters fieldset{border:1px solid var(--line);border-radius:8px;margin:0}
+.related-filters summary{cursor:pointer}
+.related-book-options{display:grid;gap:.4rem;max-height:12rem;overflow:auto;padding:.5rem}
+.related-filters p{margin:0}
+.verse-search-pagination:not(:empty){margin-block:.5rem}
