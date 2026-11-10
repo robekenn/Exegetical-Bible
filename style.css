@@ -226,7 +226,7 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 .highlight-note-form textarea { display: block; width: 100%; min-height: 100px; font-size: 16px; }
 
 @media (min-width: 761px) {
- .study {
+ .sidebar, .study {
   height: 100vh;
   height: 100dvh;
  }
