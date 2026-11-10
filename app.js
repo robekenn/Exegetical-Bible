@@ -786,10 +786,20 @@ $('theme').onclick=()=>{
  save('exegetical-dark',dark);
 };
 document.addEventListener('study-auth-changed',event=>{
- if(!event.detail.id)applyReaderTheme(stored('exegetical-dark',false)===true);
+ if(!event.detail.id){applyReaderTheme(stored('exegetical-dark',false)===true);applyReadingSize(stored('exegetical-size',20));}
 });
-document.documentElement.style.setProperty('--reading-size',stored('exegetical-size',20)+'px');
-$('settings').onclick=()=>{modal('Make yourself at home',`<p class="muted">Set a comfortable reading size.</p><label class="label" for="fontSize">Scripture text size</label><input id="fontSize" type="range" min="16" max="30" value="${stored('exegetical-size',20)}"><div class="button-row"><button id="themeSetting">Switch light / dark</button><button id="sharePassage">Copy passage link</button><a href="/feedback/">Feedback or bug report</a></div>`);$('fontSize').oninput=e=>{document.documentElement.style.setProperty('--reading-size',e.target.value+'px');save('exegetical-size',Number(e.target.value));};$('themeSetting').onclick=()=>$('theme').click();$('sharePassage').onclick=async()=>{try{await navigator.clipboard.writeText(location.href);toast('Passage link copied.');}catch{toast('Copy the link from your address bar.');}};};
+function applyReadingSize(value){
+ const size=Math.max(16,Math.min(30,Number(value)||20));
+ document.documentElement.style.setProperty('--reading-size',size+'px');
+ try{localStorage.setItem('exegetical-display-size',JSON.stringify(size));}catch{}
+}
+applyReadingSize(stored('exegetical-display-size',stored('exegetical-size',20)));
+$('settings').onclick=()=>{modal('Make yourself at home',`<p class="muted">Set a comfortable reading size.</p><p class="label">Scripture text size</p><div class="reading-sizes" role="group" aria-label="Scripture text size">${[16,18,20,22,24,26,28,30].map(size=>`<button type="button" data-reading-size="${size}" aria-pressed="${size===Number(document.documentElement.style.getPropertyValue('--reading-size').replace('px',''))}">${size}</button>`).join('')}</div><p class="reading-size-preview" aria-live="polite">Choose a comfortable size for reading Scripture.</p><div class="button-row"><button id="themeSetting">Switch light / dark</button><button id="sharePassage">Copy passage link</button><a href="/feedback/">Feedback or bug report</a></div>`);document.querySelectorAll('[data-reading-size]').forEach(button=>button.onclick=()=>{
+ const size=Number(button.dataset.readingSize);
+ applyReadingSize(size);
+ save('exegetical-size',size);
+ document.querySelectorAll('[data-reading-size]').forEach(option=>option.setAttribute('aria-pressed',String(option===button)));
+});$('themeSetting').onclick=()=>$('theme').click();$('sharePassage').onclick=async()=>{try{await navigator.clipboard.writeText(location.href);toast('Passage link copied.');}catch{toast('Copy the link from your address bar.');}};};
 let translationRequest=0;
 async function switchReadingTranslation(translation,editionName,root){
  const request=++translationRequest,revision=loadId;
@@ -1298,7 +1308,7 @@ let streak,highlightTools;
 async function applyAccountPreferences(p){
  streak.merge(p.streak||{});
  if(typeof p.dark==='boolean')applyReaderTheme(p.dark);
- if(p.size>=16&&p.size<=30)document.documentElement.style.setProperty('--reading-size',p.size+'px');
+ if(p.size>=16&&p.size<=30)applyReadingSize(p.size);
  if(explicitPassage||!state.translations.some(t=>t.id===p.translation))return;
  const revision=loadId,editionRequest=translationRequest,currentVerse=state.verse;
  const books=await api(`${p.translation}/books.json`);
