@@ -445,3 +445,8 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 .related-book-options{display:grid;gap:.4rem;max-height:12rem;overflow:auto;padding:.5rem}
 .related-filters p{margin:0}
 .verse-search-pagination:not(:empty){margin-block:.5rem}
+
+.reading-sizes{display:flex;flex-wrap:wrap;gap:8px;margin-block:12px}
+.reading-sizes button{min-width:48px;min-height:48px;border:1px solid var(--line);border-radius:8px}
+.reading-sizes button[aria-pressed=true]{background:var(--accent);color:var(--paper)}
+.reading-size-preview{font:var(--reading-size,20px)/1.6 var(--serif);padding:16px;border:1px solid var(--line);border-radius:8px}
