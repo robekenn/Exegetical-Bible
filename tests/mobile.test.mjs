@@ -12,6 +12,18 @@ test('phone navigation preserves drafts, opens study, and chooses a chapter with
  document.getElementById('studyBody').innerHTML='<textarea id="draft">Keep this draft</textarea>';
  setupMobile({state,modal,esc:s=>String(s),navigate:(...v)=>navigated=v,toast:()=>{},openVerseSearch:(query,root)=>{verseQuery=query;root.textContent="Verse matches";}});
  document.getElementById('mobileStudyButton').click();assert.equal(document.body.classList.contains('mobile-study-open'),true);assert.equal(document.getElementById('study').getAttribute('aria-modal'),'true');
+ const grip=document.getElementById('studySwipeGrip'),sheet=document.getElementById('study');
+ grip.setPointerCapture=()=>{};
+ grip.onpointerdown({button:0,pointerId:1,clientY:100});
+ grip.onpointermove({pointerId:1,clientY:130});
+ assert.equal(sheet.style.getPropertyValue('--study-swipe'),'30px');
+ grip.onpointerup({pointerId:1,clientY:130});
+ assert.equal(sheet.style.getPropertyValue('--study-swipe'),'');
+ assert.equal(document.body.classList.contains('mobile-study-open'),true);
+ grip.onpointerdown({button:0,pointerId:2,clientY:100});
+ grip.onpointerup({pointerId:2,clientY:190});
+ assert.equal(document.body.classList.contains('mobile-study-open'),false);
+ document.getElementById('mobileStudyButton').click();
  document.getElementById('mobileReadButton').click();assert.equal(document.body.classList.contains('mobile-study-open'),false);assert.equal(document.getElementById('draft').value,'Keep this draft');
  document.dispatchEvent(new w.CustomEvent('open-mobile-study'));assert.equal(document.body.classList.contains('mobile-study-open'),true);
  document.getElementById('mobilePassageButton').click();assert.equal(document.body.classList.contains('mobile-study-open'),false);assert.equal(document.querySelectorAll('[data-mobile-book]').length,2);

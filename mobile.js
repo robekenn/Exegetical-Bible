@@ -2,13 +2,36 @@ import {searchPassage,testamentOf,openSearchPassage,addVerseTextOption} from './
 export function setupMobile({state,modal,esc,navigate,toast,openVerseSearch,refreshForeground=()=>{}}){
  const $=id=>document.getElementById(id),phone=matchMedia('(max-width: 760px)'),sheet=$('study');let returnFocus=null;
  function active(view){document.querySelectorAll('[data-mobile-view]').forEach(b=>{const selected=b.dataset.mobileView===view;b.classList.toggle('active',selected);if(selected)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});}
- function closeStudy(restore=true){document.body.classList.remove('mobile-study-open');sheet.removeAttribute('role');sheet.removeAttribute('aria-modal');sheet.removeAttribute('aria-labelledby');$('mobileStudyBackdrop').hidden=true;$('mobileStudyButton').setAttribute('aria-expanded','false');active('read');if(restore&&returnFocus?.isConnected)returnFocus.focus({preventScroll:true});}
+ function closeStudy(restore=true){resetSwipe();document.body.classList.remove('mobile-study-open');sheet.removeAttribute('role');sheet.removeAttribute('aria-modal');sheet.removeAttribute('aria-labelledby');$('mobileStudyBackdrop').hidden=true;$('mobileStudyButton').setAttribute('aria-expanded','false');active('read');if(restore&&returnFocus?.isConnected)returnFocus.focus({preventScroll:true});}
  function openStudy(){if(!phone.matches)return;if($('modal').open)return;if(!document.body.classList.contains('mobile-study-open'))returnFocus=document.activeElement;document.body.classList.add('mobile-study-open');sheet.setAttribute('role','dialog');sheet.setAttribute('aria-modal','true');sheet.setAttribute('aria-labelledby','studyRef');$('mobileStudyBackdrop').hidden=false;$('mobileStudyButton').setAttribute('aria-expanded','true');active('study');$('mobileCloseStudy').focus({preventScroll:true});}
  function launch(id,view){closeStudy(false);active(view);$(id).click();}
  $('mobileReadButton').onclick=()=>closeStudy();$('mobileStudyButton').onclick=openStudy;$('mobileNotesButton').onclick=()=>launch('notebookNav','notes');$('mobileFriendsButton').onclick=()=>launch('communityButton','friends');$('mobileAccountButton').onclick=()=>launch('accountButton','account');$('mobileCloseStudy').onclick=()=>closeStudy();$('mobileStudyBackdrop').onclick=()=>closeStudy();
  document.addEventListener('open-mobile-study',openStudy);document.addEventListener('close-mobile-study',()=>{closeStudy(false);refreshForeground();});document.addEventListener('study-modal-open',()=>{if(phone.matches)closeStudy(false);});$('modal').addEventListener('close',()=>active(document.body.classList.contains('mobile-study-open')?'study':'read'));
  sheet.addEventListener('keydown',e=>{if(!phone.matches||!document.body.classList.contains('mobile-study-open'))return;if(e.key==='Escape'){e.preventDefault();closeStudy();}if(e.key==='Tab'){const items=[...sheet.querySelectorAll('button:not(:disabled),select,input,textarea,a[href]')].filter(e=>e.getClientRects().length);const first=items[0],last=items.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}});
  phone.addEventListener('change',()=>closeStudy(false));
+ const grip=$('studySwipeGrip');
+ let swipe=null;
+ function resetSwipe(){
+  swipe=null;
+  sheet.style.removeProperty('--study-swipe');
+ }
+ grip.onpointerdown=event=>{
+  if(swipe||!phone.matches||event.button!==0||!document.body.classList.contains('mobile-study-open'))return;
+  swipe={id:event.pointerId,start:event.clientY};
+  grip.setPointerCapture(event.pointerId);
+ };
+ grip.onpointermove=event=>{
+  if(swipe?.id!==event.pointerId)return;
+  sheet.style.setProperty('--study-swipe',Math.max(0,event.clientY-swipe.start)+'px');
+ };
+ grip.onpointerup=event=>{
+  if(swipe?.id!==event.pointerId)return;
+  const dismiss=event.clientY-swipe.start>=72;
+  if(dismiss)closeStudy();
+  else resetSwipe();
+ };
+ grip.onlostpointercapture=resetSwipe;
+ grip.onpointercancel=resetSwipe;
  setupMobileViewport(window,document,phone);
  $('mobilePassageButton').onclick=()=>{if(!state.books.length)return toast('The Bible is still opening. Try again in a moment.');closeStudy(false);modal('Choose a passage',`<p class="muted">${esc($('translationName').textContent)}</p><button id="pickerCurrentChapter" class="picker-current-chapter">Choose a chapter in ${esc(state.books.find(b=>b.id===state.book)?.name||state.book)} →</button><label class="label" for="mobileBookSearch">Search the Bible</label><div class="mobile-bible-search"><input id="mobileBookSearch" type="search" enterkeyhint="search" class="full-input" placeholder="Book, reference, or words" autocomplete="off" spellcheck="false"><button id="submitMobileBibleSearch" type="button" aria-label="Search">→</button></div><p id="mobileSearchStatus" class="muted" role="status"></p><div class="mobile-testament-filter"><button data-mobile-testament="all" aria-pressed="true">All books</button><button data-mobile-testament="old" aria-pressed="false">Old Testament</button><button data-mobile-testament="new" aria-pressed="false">New Testament</button></div><div id="mobileBookGrid" class="mobile-book-grid"></div>`);$('pickerCurrentChapter').onclick=()=>chapters(state.book);let testament='all',cancelVerseSearch;function jump(target){$('modal').close();return openSearchPassage(navigate,target);}function searchWords(){
  cancelVerseSearch?.();

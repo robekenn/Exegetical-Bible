@@ -21,7 +21,7 @@
 
  .study{display:none!important}.mobile-study-open{overflow:hidden}.mobile-study-open .study{display:flex!important;position:fixed;inset:auto 0 max(calc(70px + env(safe-area-inset-bottom)),var(--mobile-viewport-bottom,0px));height:min(82dvh,calc(var(--mobile-viewport-height,100dvh) - 86px));min-height:0;max-height:none;z-index:42;border:1px solid var(--line);border-bottom:0;border-radius:22px 22px 0 0;box-shadow:0 -12px 60px #14281a33;overflow:hidden;background:var(--paper)}
  .mobile-study-backdrop:not([hidden]){display:block;position:fixed;inset:0;background:#12251c55;z-index:40;border-radius:0;backdrop-filter:blur(2px)}
- .study-header{padding:23px 22px 8px;flex:0 0 auto;position:relative}.study-header:before{content:'';position:absolute;top:8px;left:calc(50% - 20px);width:40px;height:4px;background:var(--line);border-radius:10px}.study-header .eyebrow{font-size:8px}.study-header h2{font-size:28px;margin-top:7px}.study-badge{display:none}#mobileCloseStudy{height:44px;width:44px;font-size:20px;color:var(--muted)}
+ .study-header{padding:23px 22px 8px;flex:0 0 auto;position:relative}#studySwipeGrip{position:absolute;inset:0 0 auto;height:24px;touch-action:none;cursor:grab}#studySwipeGrip::before{content:'';position:absolute;top:8px;left:calc(50% - 20px);width:40px;height:4px;background:var(--line);border-radius:10px}.mobile-study-open .study{transform:translateY(var(--study-swipe,0px))}.study-header .eyebrow{font-size:8px}.study-header h2{font-size:28px;margin-top:7px}.study-badge{display:none}#mobileCloseStudy{height:44px;width:44px;font-size:20px;color:var(--muted)}
  .study .tabs{flex:0 0 auto;margin:0 14px}.study .tabs button{font-size:12px;min-height:48px;padding:12px 3px}.study-body{padding:20px 23px 35px;max-height:none;min-height:0;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}.study-body select{font-size:16px;min-height:48px}.study-body .quote{font-size:17px}.commentary-text{font-size:17px;line-height:1.85}.study-foot{display:none}
  textarea,input,select{font-size:16px}textarea{font-size:18px;min-height:180px}.button-row button{min-height:44px;font-size:12px}.word{min-height:90px;flex-basis:28%}.word small{font-size:11px}.word span{font-size:12px}.lexicon p{font-size:15px;line-height:1.85}
  dialog#modal[open]{display:flex;flex-direction:column;position:fixed;inset:var(--mobile-viewport-top,0px) 0 auto;margin:0;width:100%;max-width:none;height:var(--mobile-viewport-height,100dvh);max-height:100dvh;border:0;border-radius:0;padding:0;background:var(--paper);overflow:hidden}
@@ -435,3 +435,5 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
   font-size:max(16px,1em)!important;
  }
 }
+
+@media(min-width:761px){#studySwipeGrip{display:none}}
