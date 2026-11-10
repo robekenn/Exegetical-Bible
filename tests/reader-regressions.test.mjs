@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {JSDOM} from 'jsdom';
-import {testamentOf} from '../book-navigation.js';
+import {compareBibleReferences,testamentOf} from '../book-navigation.js';
 
 const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
 const source=(await readFile(new URL('../app.js',import.meta.url),'utf8')).replace(/^import .*;\n/gm,'');
 async function reader(path,run){
  const dom=new JSDOM(html,{url:'https://example.test/'+path,runScripts:'outside-only'});
  const doc=dom.window.document,context=dom.getInternalVMContext();
+ Object.assign(context,{compareBibleReferences,testamentOf});
  const dialog=doc.getElementById('modal');
  dialog.showModal=()=>{dialog.open=true;};
  dialog.close=()=>{dialog.open=false;};
