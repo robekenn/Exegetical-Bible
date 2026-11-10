@@ -622,7 +622,7 @@ function renderNotes(quote){
 }
 function noteCount(){$('noteCount').textContent=Object.keys(state.notes).length;}
 $('bookFilter').oninput=renderBooks;
-document.querySelectorAll('[data-testament]').forEach(b=>b.onclick=()=>{state.testament=b.dataset.testament;document.querySelectorAll('[data-testament]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});renderBooks();});
+document.querySelectorAll('[data-testament]').forEach(b=>b.onclick=()=>{state.testament=b.dataset.testament;document.querySelectorAll('[data-testament]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});bookNavigation?.setTestament();});
 $('bookSelect').onchange=e=>navigate(e.target.value,1);
 $('chapterSelect').onchange=e=>navigate(state.book,Number(e.target.value));
 function move(dir){const b=book();if(!b)return;const c=state.chapter+dir;if(c>=1&&c<=b.numberOfChapters)navigate(state.book,c);else{const next=state.books[state.books.indexOf(b)+dir];if(next)navigate(next.id,dir>0?1:next.numberOfChapters);}window.scrollTo({top:0,behavior:'smooth'});}
@@ -884,7 +884,7 @@ function chooseTranslation(mode='reader',onCompare){
  $('pickerTranslationSearch').focus();
 }
 $('translationButton').onclick=()=>chooseTranslation();
-function openVerseSearch(query,root,beforeOpen=()=>{}){
+function openVerseSearch(query,root,beforeOpen=()=>{},testament='all'){
  const supported=state.translations.filter(t=>/^(BSB|ESV|AB_[a-f0-9]{16}-[0-9]{2})$/.test(t.id));
  const current=supported.find(t=>t.id===state.translation);
  const edition=current||supported.find(t=>t.id==='BSB')||supported[0];
@@ -934,13 +934,13 @@ function openVerseSearch(query,root,beforeOpen=()=>{}){
   controller=active;
   status.textContent='Searching verses…';
   try{
-   const params=new URLSearchParams({path:'search.json',q,translation,page:String(page)});
+   const params=new URLSearchParams({path:'search.json',q,translation,page:String(page),testament});
    const response=await fetch('/api/bible?'+params,{signal:AbortSignal.any([active.signal,AbortSignal.timeout(22000)])});
    const data=await response.json();
    if(active.signal.aborted||!isCurrent())return;
    if(!response.ok)throw Error(data.error||'Search could not finish.');
    const hits=data.results;
-   status.textContent=hits.length?`Page ${page} · ${hits.length} ${hits.length===1?'result':'results'}`:'No matching verses. Try different words.';
+   status.textContent=hits.length?`Page ${page} · ${hits.length} ${hits.length===1?'result':'results'}`:data.hasMore?'No matches on this page. Try the next page.':'No matching verses on this page.';
    results.innerHTML=hits.map((hit,index)=>`<button type="button" class="verse-search-result" data-verse-result="${index}">
     <strong>${esc(hit.reference)}</strong>${hit.text?`<span dir="${data.textDirection==='rtl'?'rtl':'ltr'}">${esc(hit.text)}</span>`:''}
    </button>`).join('')+(hits.length?`<p class="attribution"><a href="${safeURL(data.licenseUrl)}" target="_blank" rel="noopener noreferrer">Translation source & license ↗</a>${data.licenseNotice?'<br>'+esc(data.licenseNotice):''}</p>`:'')
@@ -959,7 +959,7 @@ function openVerseSearch(query,root,beforeOpen=()=>{}){
   }
  }
  run(1);
- return ()=>controller?.abort();
+ return Object.assign(()=>controller?.abort(),{setTestament(next){testament=next;run(1);}});
 }
 
 const backupLimit=5_000_000;

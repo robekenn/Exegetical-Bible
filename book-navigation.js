@@ -50,11 +50,12 @@ export function setupBookSidebar({state,esc,navigate,toast,openVerseSearch}){
  function searchWords(){
   cancelVerseSearch?.();
   status.textContent='';
-  cancelVerseSearch=openVerseSearch?.(input.value,root);
+  cancelVerseSearch=openVerseSearch?.(input.value,root,undefined,state.testament);
  }
 
  function render(){
   cancelVerseSearch?.();
+  cancelVerseSearch=undefined;
   if(lastBook!==state.book){expanded=state.book;lastBook=state.book;}
   const focus=document.activeElement,focusBook=focus?.dataset?.book,focusChapter=focus?.dataset?.sideChapter,result=filtered();clear.hidden=!input.value;
   status.textContent=result.error||(result.target?'Press Enter or choose the passage below.':`${result.books.length} ${result.books.length===1?'book':'books'}${result.query?' · searching all books':''}`);
@@ -87,5 +88,5 @@ export function setupBookSidebar({state,esc,navigate,toast,openVerseSearch}){
  document.getElementById('submitBookSearch').onclick=submit;
  clear.onclick=()=>{input.value='';render();input.focus();};
  document.addEventListener('keydown',e=>{if(e.key==='/'&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&!document.querySelector('dialog[open]')&&!/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName)&&!document.activeElement?.isContentEditable&&input.getClientRects().length){e.preventDefault();input.focus();}});
- return {render};
+ return {render,setTestament(){if(cancelVerseSearch?.setTestament)cancelVerseSearch.setTestament(state.testament);else render();}};
 }

@@ -15,7 +15,7 @@ test('Bible proxy validates search, ranks BSB phrases first and paginates',async
    {type:'heading',text:'Search phrase'},
    {type:'verse',number:1,text:'Phrase with search'},
    ...Array.from({length:12},(_,i)=>({type:'verse',number:i+2,text:'A search phrase fixture'}))
-  ]}}]}]})};
+  ]}}]},{id:'JHN',name:'John',chapters:[{chapter:{number:1,content:[{type:'verse',number:1,text:'A search phrase fixture'}]}}]}]})};
  };
  async function request(params){
   const output={};
@@ -27,6 +27,7 @@ test('Bible proxy validates search, ranks BSB phrases first and paginates',async
   assert.equal((await request({translation:'https://example.test'})).status,400);
   assert.equal((await request({q:'x'})).status,400);
   assert.equal((await request({page:'51'})).status,400);
+  assert.equal((await request({testament:'other'})).status,400);
   assert.equal(requests,0);
   const first=await request({});
   assert.equal(first.status,200);
@@ -35,7 +36,12 @@ test('Bible proxy validates search, ranks BSB phrases first and paginates',async
   assert.equal(first.body.results.length,12);
   assert.equal(first.body.hasMore,true);
   const second=await request({page:'2'});
-  assert.equal(second.body.results[0].verse,1);
+  assert.equal(second.body.results[0].book,'JHN');
+  const old=await request({testament:'old',page:'2'});
+  assert.equal(old.body.results[0].book,'PSA');
+  const nt=await request({testament:'new'});
+  assert.deepEqual(nt.body.results.map(hit=>hit.book),['JHN']);
+  assert.equal(nt.body.hasMore,false);
   assert.equal(second.body.hasMore,false);
   assert.equal(requests,1);
  }finally{globalThis.fetch=originalFetch;}
@@ -56,7 +62,7 @@ test('verse search displays escaped results and opens the selected verse in the 
    fetch=async url=>{requested=url;return {ok:true,json:async()=>({results:[{book:'PSA',chapter:46,verse:10,reference:'Psalm 46:10',text:'<img src=x> Synthetic fixture'}],licenseUrl:'https://berean.bible/'})};};
    api=async()=>({books:[{id:'PSA',name:'Psalms',numberOfChapters:150}]});
    navigate=async(...args)=>{opened=[state.translation,...args].join('.');};
-   openVerseSearch("be still and know",document.getElementById("books"));
+   const search=openVerseSearch("be still and know",document.getElementById("books"));
   `,context);
   assert.equal(d.querySelector('[data-search-edition]').value,'ESV');
   const edition=d.querySelector('[data-search-edition]');
@@ -64,6 +70,9 @@ test('verse search displays escaped results and opens the selected verse in the 
   edition.dispatchEvent(new dom.window.Event('change'));
   await new Promise(resolve=>setImmediate(resolve));
   assert.match(vm.runInContext('requested',context),/translation=BSB/);
+  vm.runInContext("search.setTestament('old')",context);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.match(vm.runInContext('requested',context),/translation=BSB.*page=1.*testament=old/);
   assert.equal(d.querySelector('[data-search-results] img'),null);
   const result=d.querySelector('[data-verse-result]');
   assert.match(result.textContent,/Psalm 46:10/);
