@@ -1,6 +1,11 @@
 const oldTestament=new Set('GEN EXO LEV NUM DEU JOS JDG RUT 1SA 2SA 1KI 2KI 1CH 2CH EZR NEH EST JOB PSA PRO ECC SNG ISA JER LAM EZK DAN HOS JOL AMO OBA JON MIC NAM HAB ZEP HAG ZEC MAL'.split(' '));
 const newTestament=new Set('MAT MRK LUK JHN ACT ROM 1CO 2CO GAL EPH PHP COL 1TH 2TH 1TI 2TI TIT PHM HEB JAS 1PE 2PE 1JN 2JN 3JN JUD REV'.split(' '));
 export const testamentOf=id=>newTestament.has(id)?'new':oldTestament.has(id)?'old':'other';
+const bibleBookOrder=new Map([...oldTestament,...newTestament].map((book,index)=>[book,index]));
+export function compareBibleReferences(a,b){
+ return (bibleBookOrder.get(a.book)??Infinity)-(bibleBookOrder.get(b.book)??Infinity)
+  ||a.book.localeCompare(b.book)||a.chapter-b.chapter||a.verse-b.verse;
+}
 const groupNames={old:'Old Testament',new:'New Testament',other:'Other books'};
 const aliases={GEN:['ge','genesis'],EXO:['ex','exodus'],LEV:['lv'],NUM:['nu','numbers'],DEU:['dt','deut'],JOS:['josh'],JDG:['judg','judges'],RUT:['ruth'],PSA:['ps','psalm','psalms'],PRO:['pr','prov'],ECC:['eccl'],SNG:['song','songofsongs','songofsolomon','canticles'],ISA:['is'],JER:['jeremiah'],EZK:['ezek','ezekiel'],DAN:['daniel'],MAT:['mt','matt','matthew'],MRK:['mk','mark'],LUK:['lk','luke'],JHN:['jn','joh','john'],ACT:['ac','acts'],ROM:['ro','romans'],'1CO':['1cor','1corinthians'],'2CO':['2cor','2corinthians'],GAL:['ga'],EPH:['ephesians'],PHP:['phil','philippians'],COL:['colossians'],'1TH':['1thess','1thessalonians'],'2TH':['2thess','2thessalonians'],'1TI':['1tim','1timothy'],'2TI':['2tim','2timothy'],TIT:['titus'],PHM:['philemon'],HEB:['hebrews'],JAS:['jam','james'],'1PE':['1pet','1peter'],'2PE':['2pet','2peter'],'1JN':['1john','1jn'],'2JN':['2john','2jn'],'3JN':['3john','3jn'],JUD:['jude'],REV:['re','revelation','revelations']};
 const normalize=s=>String(s||'').toLowerCase().replace(/\b(first|second|third)\b/g,s=>({first:'1',second:'2',third:'3'}[s])).replace(/[\s.]/g,'');

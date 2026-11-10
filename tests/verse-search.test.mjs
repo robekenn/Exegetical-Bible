@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import {JSDOM} from 'jsdom';
 import handler from '../api/bible.js';
 
-test('Bible proxy validates search, ranks BSB phrases first and paginates',async()=>{
+test('Bible proxy validates search, orders BSB results by Bible reference and paginates',async()=>{
  const originalFetch=globalThis.fetch;
  let requests=0;
  globalThis.fetch=async url=>{
@@ -32,16 +32,17 @@ test('Bible proxy validates search, ranks BSB phrases first and paginates',async
   const first=await request({});
   assert.equal(first.status,200);
   assert.equal(first.cache,'private, no-store');
-  assert.equal(first.body.results[0].verse,2);
+  assert.equal(first.body.results[0].verse,1);
   assert.equal(first.body.results.length,12);
   assert.equal(first.body.hasMore,true);
   const second=await request({page:'2'});
-  assert.equal(second.body.results[0].book,'JHN');
+  assert.equal(second.body.results[0].book,'PSA');
   const old=await request({testament:'old',page:'2'});
   assert.equal(old.body.results[0].book,'PSA');
   const nt=await request({testament:'new'});
   assert.deepEqual(nt.body.results.map(hit=>hit.book),['JHN']);
   assert.equal(nt.body.hasMore,false);
+  assert.equal(second.body.results[1].book,'JHN');
   assert.equal(second.body.hasMore,false);
   assert.equal(requests,1);
  }finally{globalThis.fetch=originalFetch;}
