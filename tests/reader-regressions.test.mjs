@@ -326,3 +326,18 @@ test('phone notebook opens the editor for a single-verse note and a range',async
   assert.equal(opens,2);
  });
 });
+
+test('Deuterocanonical study offers source chapter text and a matching commentary link',async()=>{
+ await reader('?book=TOB&chapter=1&verse=1&translation=BSB',async(evaluate,doc)=>{
+  await evaluate(`
+   state.book='TOB';state.chapter=1;
+   state.books=[{id:'TOB',name:'Tobit',numberOfChapters:14}];
+   api=async path=>path.endsWith('/books.json')?{books:state.books}:{translation:{name:'Greek source',licenseUrl:'https://example.test/'},chapter:{content:[{type:'verse',number:1,content:['Greek fixture <script>']}]}};
+   renderDeuterocanonicalLanguage(document.getElementById('studyBody'),'',studyId);
+  `);
+  assert.match(doc.getElementById('ancientText').textContent,/Greek fixture <script>/);
+  assert.equal(doc.getElementById('ancientText').querySelector('script'),null);
+  await evaluate("renderCommentary(document.getElementById('studyBody'),'',studyId)");
+  assert.equal(doc.querySelector('#studyBody a').href,'https://haydockcommentary.com/tobias-1');
+ });
+});
