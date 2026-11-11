@@ -27,14 +27,18 @@ test('password forms pass symbols and Unicode unchanged and limit only new passw
   get('authPasswordVisibility').click();
   assert.equal(field.type,'password');
   await get('authForm').onsubmit(event);
+  assert.equal(get('authMessage').dataset.kind,'error');
   get('switchAuth').click();
-  get('authEmail').value='person@example.test';
+  assert.equal(get('authEmail').value,'person@example.test');
   get('termsConsent').checked=true;
   get('authPassword').value='💡'.repeat(19);
   await get('authForm').onsubmit(event);
   assert.match(get('authMessage').textContent,/72 bytes/);
   get('authPassword').value=password;
   await get('authForm').onsubmit(event);
+  assert.equal(get('authForm').hidden,true);
+  assert.equal(get('authMessage').dataset.kind,'success');
+  assert.match(get('authMessage').textContent,/confirm your email/);
   assert.deepEqual(calls,[['login',password],['signup',password]]);
  }finally{dom.window.close();for(const [key,descriptor]of saved)if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];}
 });

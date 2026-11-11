@@ -1,3 +1,4 @@
+import {validProfilePhoto} from './profile-photo.js';
 import {googleAvatarUrl,googleDisplayName} from './google-auth.js';
 export function renderAccountAvatar(user,profile,root=document){
  for(const id of ['accountButton','mobileAccountButton']){
@@ -8,7 +9,7 @@ export function renderAccountAvatar(user,profile,root=document){
   button.querySelector('.account-avatar')?.remove();if(!mobile)button.replaceChildren();else{const icon=button.querySelector('svg');if(icon){icon.setAttribute('hidden','');icon.style.display='none';}}
   const initial=root.createElement('span');initial.className='account-avatar account-initial';initial.setAttribute('aria-hidden','true');initial.textContent=(profile?.display_name?.trim()||profile?.username||googleDisplayName(user)||'You').slice(0,1).toUpperCase();button.prepend(initial);
   const source=profile?.avatar||(profile?null:googleAvatarUrl(user));
-  if(/^data:image\/webp;base64,[A-Za-z0-9+/=]+$/.test(source||'')||source===googleAvatarUrl(user)&&Boolean(source)){
+  if(validProfilePhoto(source)||source===googleAvatarUrl(user)&&Boolean(source)){
    const img=root.createElement('img');img.className='account-avatar';img.alt='';img.referrerPolicy='no-referrer';img.src=source;img.onerror=()=>img.replaceWith(initial);initial.replaceWith(img);
   }
  }

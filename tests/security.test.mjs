@@ -25,3 +25,26 @@ test('account API rejects a token for any identity other than the confirmed acco
   assert.deepEqual(deleted,[second]);
  }finally{for(const [key,value]of Object.entries(prior)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
 });
+
+test('profile photo conversion authenticates the request and encodes the resized JPEG as WebP',async()=>{
+ const {createAccountHandler}=await import('../api/account.js');
+ const {default:sharp}=await import('sharp');
+ const env={SUPABASE_URL:'https://example.test',SUPABASE_PUBLISHABLE_KEY:'fixture-public'};
+ const prior=Object.fromEntries(Object.keys(env).map(key=>[key,process.env[key]]));
+ Object.assign(process.env,env);
+ try{
+  const handler=createAccountHandler(()=>({auth:{getUser:async token=>({data:{user:token==='fixture'?{id:'signed-in'}:null}})}}));
+  const jpeg=await sharp({create:{width:256,height:256,channels:3,background:'#284e43'}}).jpeg().toBuffer();
+  const req={method:'POST',headers:{origin:'https://example.test',host:'example.test',authorization:'Bearer invalid'},body:{action:'convert-photo',jpeg:'data:image/jpeg;base64,'+jpeg.toString('base64')}};
+  let code,body;
+  const res={setHeader(){},status(n){code=n;return this;},json(value){body=value;}};
+  await handler(req,res);
+  assert.equal(code,401);
+  req.headers.authorization='Bearer fixture';
+  await handler(req,res);
+  assert.equal(code,200);
+  assert.match(body.avatar,/^data:image\/webp;base64,/);
+  const encoded=await sharp(Buffer.from(body.avatar.split(',')[1],'base64')).metadata();
+  assert.deepEqual([encoded.format,encoded.width,encoded.height],['webp',256,256]);
+ }finally{for(const [key,value]of Object.entries(prior)){if(value===undefined)delete process.env[key];else process.env[key]=value;}}
+});

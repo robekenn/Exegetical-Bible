@@ -174,7 +174,100 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
    button.textContent=show?'Hide password':'Show password';
   };
  }
- function authForm(mode='login'){if(sessionEnded()){location.reload();return;}if(!client){modal('Accounts unavailable','<p class="muted">Account storage is not configured. You can keep studying and saving device notes.</p>');return;}modal(mode==='signup'?'Create your study account':'Welcome back',`<p class="muted">Save notes, highlights, and reading preferences to your private account.</p><form id="googleAuthForm" class="google-auth-form"><label class="check-label"><input id="googleConsent" type="checkbox" required> I am at least 16, agree to the <a href="/terms/" target="_blank" rel="noopener">Terms</a>, and have read the <a href="/privacy/" target="_blank" rel="noopener">Privacy notice</a>.</label><button id="googleSignIn" class="google-signin" ${googleEnabled?'':'disabled'} type="submit"><span aria-hidden="true" class="google-g">G</span> Continue with Google</button><p id="googleAuthMessage" class="muted" role="status">${googleEnabled?'Your Google picture will be used unless you choose another.':'Google sign-in is awaiting provider setup. Email sign-in is available below.'}</p></form><div class="auth-divider"><span>or use email</span></div><form id="authForm"><label class="label" for="authEmail">Email</label><input id="authEmail" name="username" class="full-input" type="email" autocomplete="username" required><label class="label" for="authPassword">Password</label>${passwordField('authPassword',mode==='signup')}${mode==='signup'?'<label class="check-label"><input id="termsConsent" type="checkbox" required> I am at least 16 and agree to the <a href="/terms/" target="_blank" rel="noopener">Terms</a> and have read the <a href="/privacy/" target="_blank" rel="noopener">Privacy notice</a>.</label>':''}<p id="authMessage" role="status" class="muted"></p><button class="primary" id="authSubmit" type="submit">${mode==='signup'?'Create account':'Sign in'}</button></form><div class="button-row"><button id="switchAuth">${mode==='signup'?'Already have an account? Sign in':'New here? Create an account'}</button><button id="forgotPassword">Forgot password?</button></div>`);$('googleAuthForm').onsubmit=async e=>{e.preventDefault();if(!googleEnabled)return;if(!$('googleAuthForm').reportValidity())return;const button=$('googleSignIn'),message=$('googleAuthMessage');button.disabled=true;message.textContent='Opening Google…';try{sessionStorage.setItem('exegetical-google-consent',String(Date.now()));const {error}=await signInWithGoogle(client,location.origin);if(error)throw error;}catch(e){sessionStorage.removeItem('exegetical-google-consent');if(message.isConnected){message.textContent=e.message||'Google sign-in could not start. Try again.';button.disabled=false;}}};bindPasswordVisibility('authPassword');$('switchAuth').onclick=()=>authForm(mode==='signup'?'login':'signup');$('forgotPassword').onclick=()=>location.assign('/reset-password/');$('authForm').onsubmit=async e=>{e.preventDefault();const email=$('authEmail').value.trim(),password=$('authPassword').value;if(mode==='signup'&&!passwordFitsProvider(password,$('authMessage')))return;$('authSubmit').disabled=true;const result=mode==='signup'?await client.auth.signUp({email,password,options:{emailRedirectTo:location.origin+'/auth/callback',data:{terms_version:'2026-11-02',terms_accepted_at:new Date().toISOString()}}}):await client.auth.signInWithPassword({email,password});if(result.error){if($('authMessage'))$('authMessage').textContent=result.error.message;if($('authSubmit'))$('authSubmit').disabled=false;return;}if(result.data.session){$('modal').close();await loadCloud(result.data.session);toast('Signed in. Your study space is ready.');}else{$('authMessage').textContent='Check your email to confirm your account, then sign in here.';$('authSubmit').disabled=false;}};}
+ function showAuthMessage(message,text,kind='error'){
+  message.dataset.kind=kind;
+  message.textContent=text;
+  if(kind!=='pending')message.focus();
+ }
+ function authForm(mode='login',email=''){
+  if(sessionEnded()){location.reload();return;}
+  if(!client){modal('Accounts unavailable','<p class="muted">Account storage is unavailable right now. You can still read and save notes on this device.</p>');return;}
+  const creating=mode==='signup';
+  const action=creating?'Create account':'Sign in';
+  const consent=id=>`<label class="auth-consent"><input id="${id}" type="checkbox" required><span>I am at least 16, agree to the <a href="/terms/" target="_blank" rel="noopener">Terms</a>, and have read the <a href="/privacy/" target="_blank" rel="noopener">Privacy notice</a>.</span></label>`;
+  modal(creating?'Create your account':'Sign in to Exegetical',`
+   <div class="auth-flow">
+    <p class="auth-intro">${creating?'Keep your notes and highlights in one place, across devices.':'Open your saved notes, highlights, and reading preferences.'}</p>
+    <div id="authMessage" class="auth-feedback" role="status" tabindex="-1"></div>
+    <form id="authForm">
+     <label class="auth-label" for="authEmail">Email address</label>
+     <input id="authEmail" name="username" class="full-input" type="email" autocomplete="username" autocapitalize="none" required>
+     <div class="auth-label-row">
+      <label class="auth-label" for="authPassword">Password</label>
+      ${creating?'':'<a id="forgotPassword" href="/reset-password/">Forgot password?</a>'}
+     </div>
+     <div class="auth-password">${passwordField('authPassword',creating)}</div>
+     ${creating?`<p class="auth-hint">Use at least 12 characters.</p>${consent('termsConsent')}`:''}
+     <button class="primary auth-submit" id="authSubmit" type="submit">${action}</button>
+    </form>
+    ${googleEnabled?`<div class="auth-divider"><span>or</span></div>
+    <details class="auth-google">
+     <summary><span aria-hidden="true" class="google-g">G</span> Continue with Google</summary>
+     <form id="googleAuthForm">
+      ${consent('googleConsent')}
+      <div id="googleAuthMessage" class="auth-feedback" role="status" tabindex="-1"></div>
+      <button id="googleSignIn" type="submit">Open Google sign-in</button>
+     </form>
+    </details>`:''}
+    <div class="auth-switch"><span id="authSwitchPrompt">${creating?'Already have an account?':'New to Exegetical?'}</span> <button id="switchAuth" type="button">${creating?'Sign in':'Create an account'}</button></div>
+   </div>`);
+  const emailInput=$('authEmail'),form=$('authForm'),submit=$('authSubmit'),status=$('authMessage');
+  emailInput.value=email;
+  $('switchAuth').onclick=()=>authForm(creating?'login':'signup',emailInput.value.trim());
+  bindPasswordVisibility('authPassword');
+  const googleForm=$('googleAuthForm');
+  if(googleForm)googleForm.onsubmit=async event=>{
+   event.preventDefault();
+   if(!googleForm.reportValidity())return;
+   const button=$('googleSignIn'),message=$('googleAuthMessage');
+   button.disabled=true;
+   showAuthMessage(message,'Opening Google…','pending');
+   try{
+    sessionStorage.setItem('exegetical-google-consent',String(Date.now()));
+    const {error}=await signInWithGoogle(client,location.origin);
+    if(error)throw error;
+   }catch(error){
+    sessionStorage.removeItem('exegetical-google-consent');
+    if(message.isConnected){showAuthMessage(message,error.message||'Google sign-in could not start. Try again.');button.disabled=false;}
+   }
+  };
+  form.onsubmit=async event=>{
+   event.preventDefault();
+   const address=emailInput.value.trim(),password=$('authPassword').value;
+   if(creating&&!passwordFitsProvider(password,status)){showAuthMessage(status,status.textContent);return;}
+   submit.disabled=true;
+   showAuthMessage(status,creating?'Creating your account…':'Signing in…','pending');
+   try{
+    const result=creating
+     ?await client.auth.signUp({email:address,password,options:{emailRedirectTo:location.origin+'/auth/callback',data:{terms_version:'2026-11-02',terms_accepted_at:new Date().toISOString()}}})
+     :await client.auth.signInWithPassword({email:address,password});
+    if(result.error)throw result.error;
+    if(result.data.session){
+     if(form.isConnected)$('modal').close();
+     await loadCloud(result.data.session);
+     toast('Signed in.');
+    }else if(form.isConnected){
+     form.hidden=true;
+     form.reset();
+     emailInput.value=address;
+     document.querySelector('.auth-flow .auth-intro').hidden=true;
+     for(const element of document.querySelectorAll('.auth-flow .auth-divider, .auth-google'))element.hidden=true;
+     $('authSwitchPrompt').textContent='Already confirmed your email?';
+     showAuthMessage(status,`Check your inbox at ${address} for the confirmation link. Open it to confirm your email. If it doesn’t arrive, check your spam folder.`,'success');
+    }
+   }catch(error){
+    if(form.isConnected){
+     const messages={
+      invalid_credentials:'The email or password is incorrect. Try again or use “Forgot password?”',
+      email_not_confirmed:'Confirm your email before signing in. Look for the confirmation link in your inbox or spam folder.'
+     };
+     showAuthMessage(status,messages[error.code]||error.message||'Something went wrong. Please try again.');
+    }
+   }finally{
+    if(form.isConnected)submit.disabled=false;
+   }
+  };
+ }
  async function resolve(k){const id=epoch;const {data,error}=await client.from('study_entries').select('*').eq('user_id',user.id).eq('passage',k).maybeSingle();if(error||id!==epoch){toast('Could not load the other version. Try again.');return;}const local=dirty.get(k);modal('Choose the note to keep',`<p class="muted">${esc(k)} changed on another device. Neither version will be overwritten until you choose.</p><h3>Your device</h3><p class="conflict-note">${esc(local?.text||'(No note)')}</p><h3>Saved account version</h3><p class="conflict-note">${esc(data?.payload?.text||'(No note)')}</p><div class="button-row"><button id="keepLocal">Keep this device’s version</button><button id="keepCloud">Use account version</button></div>`);$('keepLocal').onclick=()=>{revisions.set(k,Number(data?.revision||0));rememberRevisions();conflicts.delete(k);$('modal').close();push();};$('keepCloud').onclick=()=>{dirty.delete(k);conflicts.delete(k);revisions.set(k,Number(data?.revision||0));if(data?.payload.text)state.notes[k]=data.payload;else delete state.notes[k];if(data?.payload.highlighted)state.highlights[k]=true;else delete state.highlights[k];lastSnapshot=currentPayloads();cache();refresh();display();$('modal').close();};}
  function accountPanel(){if(!user)return authForm();modal('My account',accountMenu({email:user.email,status:saveState().detail,needsAttention:saveState().attention,saving:saveState().saving,avatar:$('accountButton').querySelector('img')?.getAttribute('src')||'',initial:$('accountButton').querySelector('.account-initial')?.textContent||'Y',conflicts:[...conflicts],esc}));const adminButton=$('adminPortal'),owner=user.id;adminButton.onclick=()=>location.assign('/admin/');revealAdminButton(adminButton,client,()=>user?.id===owner&&$('adminPortal')===adminButton);$('editProfile').onclick=()=>document.dispatchEvent(new CustomEvent('open-community',{detail:'profile'}));$('openFriends').onclick=()=>document.dispatchEvent(new CustomEvent('open-community',{detail:'friends'}));$('accountSignOut').onclick=signOut;$('retrySync').onclick=async()=>{$('modal').close();if(!ready){const {data}=await client.auth.getSession();user=null;loadCloud(data.session);}else{syncError='';await push();await preferenceSync?.flush();if(!dirty.size&&!preferenceSync?.pending){const {data}=await client.auth.getSession();loadCloud(data.session,true);}}};$('importDevice').onclick=()=>{if(!ready)return toast('Load your account before importing.');const keys=new Set([...Object.keys(device.notes),...Object.keys(device.highlights)]);if(!keys.size)return toast('No guest notes or highlights to copy.');let overlaps=[...keys].filter(k=>state.notes[k]&&device.notes[k]&&state.notes[k].text!==device.notes[k].text);if(overlaps.length&&!confirm(`Replace ${overlaps.length} conflicting account note(s) with guest notes? Export a backup first if you need both versions.`))return;for(const k of keys){if(device.notes[k])state.notes[k]=device.notes[k];if(device.highlights[k])state.highlights[k]=true;}mutate();refresh();$('modal').close();toast('Guest notes copied; syncing to your account.');};document.querySelectorAll('[data-conflict]').forEach(b=>b.onclick=()=>resolve(b.dataset.conflict));}
  $('accountButton').onclick=accountPanel;
@@ -218,7 +311,7 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
   await loadCloud(session);
   if(location.pathname==='/auth/callback'&&!session&&callbackFailed){
    authForm();
-   $('googleAuthMessage').textContent='Sign-in was cancelled or could not be completed. Please try again.';
+   showAuthMessage($('authMessage'),'Sign-in could not be completed. If you followed an email confirmation link, it may have expired. You can try signing in or creating your account again.');
    history.replaceState(null,'','/');
   }
  }else{ready=true;display();}
