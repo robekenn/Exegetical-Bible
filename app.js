@@ -286,7 +286,50 @@ studyTabs[0].parentElement.addEventListener('focusout',event=>{
   studyTabs.forEach(button=>button.tabIndex=button.dataset.tab===state.tab?0:-1);
  }
 });
+const deuterocanonicalBooks=new Set(['TOB','JDT','WIS','SIR','BAR','LJE','1MA','2MA','3MA','4MA','1ES','2ES','ESG','DAG','SUS','BEL','MAN','PS2']);
+function deuterocanonicalPassage(){
+ return deuterocanonicalBooks.has(state.book)||(state.book==='DAN'&&state.chapter>12)||(state.book==='EST'&&state.chapter>10);
+}
+function haydockReference(){
+ const slugs={TOB:'tobias',JDT:'judith',WIS:'wisdom',SIR:'ecclesiasticus',BAR:'baruch','1MA':'1-machabees','2MA':'2-machabees'};
+ const slug=slugs[state.book];
+ return slug?'https://haydockcommentary.com/'+slug+'-'+state.chapter:null;
+}
+async function renderDeuterocanonicalLanguage(root,quote,id){
+ const bookId=state.book,chapter=state.chapter;
+ root.innerHTML=quote+`<h3>Ancient-language text</h3><p class="muted">Read this chapter in a Greek or Latin source edition. These editions may divide and number passages differently from your reading translation.</p>
+ <label class="label" for="ancientEdition">Source edition</label><select id="ancientEdition"><option value="grc_bre">Greek Septuagint · Brenton edition</option><option value="lat_clv">Latin · Clementine Vulgate (1598)</option></select>
+ <div id="ancientText" aria-live="polite"></div>`;
+ const select=$('ancientEdition'),content=$('ancientText');
+ let request=0;
+ async function load(){
+  const current=++request,edition=select.value;
+  content.textContent='Loading source text…';
+  try{
+   const books=(await api(edition+'/books.json')).books;
+   if(id!==studyId||current!==request)return;
+   const sourceBook=books.find(book=>book.id===bookId);
+   if(!sourceBook||sourceBook.numberOfChapters<chapter){
+    content.innerHTML='<p>This edition does not include this book or chapter. Try the other source edition.</p>';
+    return;
+   }
+   const data=await api(edition+'/'+bookId+'/'+chapter+'.json');
+   if(id!==studyId||current!==request)return;
+   const translation=data.translation;
+   content.innerHTML=`<p class="source-label">${esc(translation.name)}</p><p class="muted">Chapter text is shown in full for comparison. Word glosses and grammar are not available in this source.</p><div class="commentary-text" lang="${edition==='grc_bre'?'grc':'la'}">${data.chapter.content.filter(verse=>verse.type==='verse').map(verse=>'<p><sup>'+esc(verse.number)+'</sup> '+esc(inlineVerse(verse.content))+'</p>').join('')}</div><p class="attribution">${esc(translation.licenseNotice||'')} <a href="${safeURL(translation.licenseUrl||translation.website)}" target="_blank" rel="noopener noreferrer">Source &amp; license ↗</a></p>`;
+  }catch(error){if(id===studyId&&current===request)showError(content,error,load);}
+ }
+ select.onchange=load;
+ await load();
+}
 async function renderCommentary(root,quote,id){
+ if(deuterocanonicalPassage()){
+  const link=haydockReference();
+  root.innerHTML=quote+`<h3>Historical commentary</h3><p>The current in-app commentary collection does not cover this book. Haydock’s Catholic Bible Commentary provides notes for the Catholic Deuterocanonical books.</p>
+  ${link?`<p><a href="${esc(link)}" target="_blank" rel="noopener noreferrer">Read Haydock on ${esc(book()?.name||state.book)} ${state.chapter} ↗</a></p>`:'<p><a href="https://haydockcommentary.com/" target="_blank" rel="noopener noreferrer">Browse Haydock’s commentary ↗</a></p>'}
+  <p class="muted">Commentary opens on the source website. Haydock follows Douay–Rheims/Vulgate numbering and reflects a historical Catholic interpretation. Coverage varies by book.</p>`;
+  return;
+ }
  const selected=state.commentary,chapter=state.chapter,bookId=state.book;
  const restoreFocus=document.activeElement?.id==='commentarySelect';
  root.innerHTML=`<label class="label" for="commentarySelect">COMMENTARY LIBRARY</label><select id="commentarySelect" aria-describedby="commentaryHelp">${state.commentaries.map(c=>`<option value="${esc(c.id)}" ${c.id===selected?'selected':''}>${esc(c.name)}</option>`).join('')}</select><p id="commentaryHelp" class="muted">You can switch commentaries at any time. Coverage varies by author.</p>${quote}<div id="commentaryContent" aria-busy="true"><p class="loading" role="status">Opening commentary…</p></div>`;
@@ -483,6 +526,7 @@ async function renderStudy(){const id=++studyId;++wordId;const root=$('studyBody
  const picker=passage.length>1&&state.tab==='language'?`<label class="label" for="studyFocusVerse">ORIGINAL LANGUAGE FOR</label><select id="studyFocusVerse">${passage.map(v=>`<option value="${v.number}" ${v.number===state.verse?'selected':''}>Verse ${v.number}</option>`).join('')}</select>`:'';
  const quote=`<blockquote class="quote">${esc(passageText(passage))}</blockquote>`;
  if(state.tab!=='commentary')root.innerHTML=quote+picker+'<p class="loading">Finding context…</p>';try{if(state.tab==='commentary'){await renderCommentary(root,quote,id);}
+else if(state.tab==='language'&&deuterocanonicalPassage()){await renderDeuterocanonicalLanguage(root,quote,id);}
 else if(state.tab==='language'){const d=await api(`d/bsb-interlinear/${state.book}/${state.chapter}.json`);if(id!==studyId)return;const words=d.chapter.content.find(v=>v.verse===state.verse)?.words||[];root.innerHTML=quote+picker+`<div class="source-label">BEREAN INTERLINEAR · ${words[0]?.language==='hebrew'?'HEBREW':'GREEK'}</div><h3>Behind the words</h3><p class="muted">Select an original-language word for its definition and grammar. Glosses follow the Berean text; they aren’t a word-for-word mapping to every translation.</p><div class="word-grid" ${words[0]?.language==='hebrew'?'dir="rtl"':''}>${words.map((w,i)=>`<button class="word" data-word="${i}"><b>${esc(w.text)}</b><small dir="ltr">${esc(w.transliteration)}</small><span dir="ltr">${esc(w.gloss||'—')}</span></button>`).join('')}</div><div id="definition" aria-live="polite"></div><p class="attribution">Interlinear: Berean Bible, public domain. Definitions: <a href="https://github.com/STEPBible/STEPBible-Data" target="_blank" rel="noopener noreferrer">STEPBible / Tyndale House, Cambridge</a>, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>. Data formatted by AO Lab.</p>`;root.querySelectorAll('[data-word]').forEach(b=>b.onclick=()=>loadWord(words[Number(b.dataset.word)],id));}
 else if(state.tab==='notes'){renderNotes(quote);}
 else if(state.tab==='related'){await renderRelated(root,quote,passage,id);}
