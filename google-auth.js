@@ -1,3 +1,4 @@
+import {resizeProfilePhoto} from './profile-photo.js';
 export function googleAvatarUrl(user){
  const identity=user?.identities?.find(i=>i.provider==='google');
  if(!identity)return null;
@@ -12,10 +13,10 @@ export async function googleProviderAvailable(config,request=fetch){
 export function signInWithGoogle(client,origin){
  return client.auth.signInWithOAuth({provider:'google',options:{redirectTo:origin+'/auth/callback',scopes:'openid email profile',queryParams:{prompt:'select_account'}}});
 }
-// Import only the signed-in Google identity's photo, then retain the existing small WebP storage format.
-export function importGooglePicture(user){
+// Import only the signed-in Google identity's photo, then store a resized copy.
+export function importGooglePicture(user,convert){
  const url=googleAvatarUrl(user);if(!url)return Promise.reject(Error('No supported Google profile picture is available.'));
  return new Promise((resolve,reject)=>{const image=new Image();image.crossOrigin='anonymous';image.referrerPolicy='no-referrer';const timer=setTimeout(()=>{image.src='';reject(Error('Google picture took too long to load. Try uploading a photo instead.'));},8000);
  image.onerror=()=>{clearTimeout(timer);reject(Error('Could not load your Google picture. Try uploading a photo instead.'));};
- image.onload=()=>{clearTimeout(timer);try{if(!image.naturalWidth||image.naturalWidth*image.naturalHeight>25000000)throw Error('Unsupported picture size.');const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;const size=Math.min(image.naturalWidth,image.naturalHeight);canvas.getContext('2d').drawImage(image,(image.naturalWidth-size)/2,(image.naturalHeight-size)/2,size,size,0,0,256,256);const data=canvas.toDataURL('image/webp',.8);if(!/^data:image\/webp;base64,/.test(data)||data.length>=100000)throw Error('Picture could not be converted.');resolve(data);}catch{reject(Error('Could not import your Google picture. Try uploading a photo instead.'));}};image.src=url;});
+ image.onload=()=>{clearTimeout(timer);try{if(!image.naturalWidth||image.naturalWidth*image.naturalHeight>25000000)throw Error('Unsupported picture size.');resolve(resizeProfilePhoto(image,convert));}catch{reject(Error('Could not import your Google picture. Try uploading a photo instead.'));}};image.src=url;});
 }

@@ -1,3 +1,4 @@
+import {readProfilePhoto} from './profile-photo.js';
 import {googleAvatarUrl,googleDisplayName,importGooglePicture} from './google-auth.js';
 import {sessionResult,clearAccountCache} from './security-model.js';
 import {renderAccountAvatar} from './account-avatar.js';
@@ -14,45 +15,127 @@ export function createCommunity({account,state,esc,modal,toast,openVerse,current
  function header(tab){view=tab;page++;const titles={profile:'My profile',friends:'Friends',messages:'Messages',privacy:'Privacy controls'};const paths={profile:'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM4 22v-2a8 8 0 0 1 16 0v2',friends:'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3 21v-3a6 6 0 0 1 12 0v3M17 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 4v2',messages:'M3 4h18v13H9l-6 4V4Z',privacy:'M12 3 3 7v5c0 5 9 10 9 10s9-5 9-10V7l-9-4ZM9 12l2 2 4-4'};modal(titles[tab]||'Your community',`<div class="community-space"><nav class="community-nav" aria-label="Community pages">${Object.entries(titles).map(([key,title])=>`<button data-community="${key}" ${tab===key?'aria-current="page"':''} class="${tab===key?'active':''}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[key]}"/></svg><span>${key==='privacy'?'Privacy':key==='profile'?'Profile':title}</span></button>`).join('')}</nav><div id="communityContent"><p class="loading">Opening your community space…</p></div></div>`);document.querySelectorAll('[data-community]').forEach(b=>b.onclick=()=>open(b.dataset.community));}
 
  async function open(tab='profile'){if(!me())return account.signIn();if(tab==='messages')return chat();header(tab);const id=page;try{await load();if(id!==page)return;if(tab==='profile')profileForm();else if(tab==='privacy')privacyPanel();else friendsPanel();}catch(e){if(id===page)$('communityContent').innerHTML=`<p class="error">${esc(e.message)}<br>Close this window and try again.</p>`;}}
- function profileForm(){let pic=profile?.avatar||null;$('communityContent').innerHTML=`<div class="profile-intro">${avatar({...profile,avatar:pic,display_name:profile?.display_name||googleDisplayName(me())})}<div><h3>${esc(profile?.display_name||'Make this space yours')}</h3><p class="muted">Your email is private. Use a display name or nickname.</p></div></div><form id="profileForm"><section class="community-card photo-card"><h3>Profile picture</h3><label class="label" for="profilePhoto">Choose a photo (optional)</label><input type="file" id="profilePhoto" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" class="full-input">${googleAvatarUrl(me())?'<button id="useGooglePhoto" type="button">Use Google picture</button>':''}<button id="removePhoto" type="button">Remove picture</button><p id="photoStatus" class="muted" role="status">Optional. Photos up to 30 MB are resized automatically. JPEG, PNG, WebP, or a phone photo your browser can open.</p></section><section class="community-card"><h3>Your identity</h3><label class="label" for="displayName">Display name</label><input id="displayName" class="full-input" maxlength="60" required value="${esc(profile?.display_name||googleDisplayName(me()))}"><label class="label" for="username">Username</label><input id="username" class="full-input" required autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Choose a username" aria-describedby="usernameHelp" value="${esc(profile?.username||'')}"><p id="usernameHelp" class="muted">Use 3–24 letters, numbers or underscores, without spaces or @. Capital letters are saved as lowercase.</p></section><section class="community-card"><h3>A little about you</h3><p class="muted">Optional details to share with accepted friends.</p><label class="label" for="profileBio">About you (optional)</label><textarea id="profileBio" maxlength="600" placeholder="A little about your study journey…">${esc(profile?.bio||'')}</textarea><label class="label" for="profileLocation">General location (optional — avoid a street address)</label><input id="profileLocation" class="full-input" maxlength="80" value="${esc(profile?.location||'')}"><label class="label" for="profileInterests">Study interests (optional)</label><input id="profileInterests" class="full-input" maxlength="200" placeholder="Biblical languages, the Gospels…" value="${esc(profile?.interests||'')}"></section><section class="community-card"><h3>Visibility & consent</h3><label class="check-label"><input id="profileDiscoverable" type="checkbox" ${profile?.discoverable?'checked':''}> Let people find my name and picture using my exact username.</label><p class="muted">Accepted friends can see your name, picture, bio, general location and interests. Friends only see notebook notes that you choose to share in a message.</p><label class="check-label"><input id="profileTerms" type="checkbox" required ${profile?'checked':''}> I am at least 16, agree to the <a href="/terms/" target="_blank" rel="noopener">Terms</a> and <a href="/guidelines/" target="_blank" rel="noopener">Community guidelines</a>, and have read the <a href="/privacy/" target="_blank" rel="noopener">Privacy notice</a>.</label></section><div class="profile-save"><p id="profileStatus" class="muted" role="status"></p><button id="saveProfile" class="primary">Save profile</button></div></form>`;
- bindUsernameField($('username'));
- if($('useGooglePhoto'))$('useGooglePhoto').onclick=async()=>{const owner=me()?.id;const button=$('useGooglePhoto');button.disabled=true;$('saveProfile').disabled=true;try{const data=await importGooglePicture(me());if(owner!==me()?.id||!button.isConnected)return;pic=data;document.querySelector('.profile-intro .profile-avatar').outerHTML=avatar({avatar:pic,display_name:$('displayName').value});$('photoStatus').textContent='Google picture ready. Save your profile to apply.';}catch(e){fail(e);}finally{if(button.isConnected){button.disabled=false;$('saveProfile').disabled=false;}}};
- let photoRevision=0;
- $('profilePhoto').onchange=async e=>{
-  const file=e.target.files[0],revision=++photoRevision,owner=me()?.id;
-  if(!file)return;
-  const form=$('profileForm'),status=$('photoStatus'),button=$('saveProfile');
-  const active=()=>revision===photoRevision&&form.isConnected&&owner===me()?.id;
-  button.disabled=true;
-  status.textContent='Preparing your photo…';
-  let image,url;
-  try{
-   if(file.size>30*1024*1024)throw Error('Choose a photo smaller than 30 MB.');
-   if(!['image/png','image/jpeg','image/webp','image/heic','image/heif'].includes(file.type)&&!(file.type===''&&/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)))throw Error('Choose a JPEG, PNG, WebP, HEIC, or HEIF photo.');
-   try{image=await createImageBitmap(file,{resizeWidth:1024,resizeQuality:'high'});}
-   catch{
-    url=URL.createObjectURL(file);
-    image=new Image();
-    image.src=url;
-    await image.decode();
+ function profileForm({onboarding=false}={}){
+  const existing=profile?.id===me()?.id;
+  let pic=profile?.avatar||null;
+  const optional=`
+   <section class="community-card photo-card">
+    <div class="profile-intro">${avatar({...profile,avatar:pic,display_name:profile?.display_name||googleDisplayName(me())})}<h3>Profile picture</h3></div>
+    <label class="label" for="profilePhoto">Choose a photo</label>
+    <input type="file" id="profilePhoto" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" class="full-input" aria-describedby="photoHelp">
+    <div class="profile-photo-actions">
+     ${googleAvatarUrl(me())?'<button id="useGooglePhoto" type="button">Use Google picture</button>':''}
+     <button id="removePhoto" type="button" ${pic?'':'hidden'}>Remove picture</button>
+    </div>
+    <p id="photoHelp" class="muted">Photos up to 30 MB are resized automatically.</p>
+    <p id="photoStatus" class="auth-feedback" role="status"></p>
+   </section>
+   <section class="community-card">
+    <h3>About you</h3>
+    <label class="label" for="profileBio">Bio (optional)</label>
+    <textarea id="profileBio" maxlength="600">${esc(profile?.bio||'')}</textarea>
+    <label class="label" for="profileLocation">General location (optional)</label>
+    <input id="profileLocation" class="full-input" maxlength="80" value="${esc(profile?.location||'')}">
+    <label class="label" for="profileInterests">Study interests (optional)</label>
+    <input id="profileInterests" class="full-input" maxlength="200" value="${esc(profile?.interests||'')}">
+   </section>`;
+  $('communityContent').innerHTML=`
+   <form id="profileForm">
+    <p class="muted">${onboarding?'Choose how you’ll appear to friends. Your email stays private.':'Manage the name and details you share with friends.'}</p>
+    <section class="community-card">
+     <h3>Your name</h3>
+     <label class="label" for="username">Username (required)</label>
+     <input id="username" class="full-input" required autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="Choose a username" aria-describedby="usernameHelp" value="${esc(profile?.username||'')}">
+     <p id="usernameHelp" class="muted">Use 3–24 letters, numbers or underscores. Capital letters are saved as lowercase.</p>
+     <label class="label" for="displayName">Display name (required)</label>
+     <input id="displayName" class="full-input" maxlength="60" required autocomplete="nickname" value="${esc(profile?.display_name||googleDisplayName(me()))}">
+     <label class="check-label"><input id="profileDiscoverable" type="checkbox" ${profile?.discoverable?'checked':''}> Let people find me by my exact username.</label>
+    </section>
+    ${onboarding?`<details class="profile-optional"><summary>Add a photo or bio (optional)</summary>${optional}</details>`:optional}
+    <section class="community-card">
+     <h3>Profile visibility</h3>
+     <p class="muted">Accepted friends can see your name, photo and any details you add.</p>
+     <label class="auth-consent"><input id="profileTerms" type="checkbox" required ${existing?'checked':''}><span>I am at least 16, agree to the <a href="/terms/" target="_blank" rel="noopener">Terms</a> and <a href="/guidelines/" target="_blank" rel="noopener">Community guidelines</a>, and have read the <a href="/privacy/" target="_blank" rel="noopener">Privacy notice</a>.</span></label>
+    </section>
+    <div id="profileStatus" class="auth-feedback" role="status" tabindex="-1"></div>
+    <div class="profile-save"><button id="saveProfile" class="primary">${existing?'Save profile':'Create profile'}</button></div>
+   </form>`;
+  bindUsernameField($('username'));
+  const form=$('profileForm'),save=$('saveProfile'),photo=$('profilePhoto'),remove=$('removePhoto'),google=$('useGooglePhoto');
+  const status=$('photoStatus'),profileStatus=$('profileStatus'),owner=me().id;
+  const active=()=>form.isConnected&&owner===me()?.id;
+  const setBusy=busy=>{for(const control of [save,photo,remove,google])if(control)control.disabled=busy;};
+  const feedback=(element,message,kind)=>{element.dataset.kind=kind;element.textContent=message;};
+  async function changePhoto(prepare,removePicture=false){
+   if(!active()||save.disabled)return;
+   setBusy(true);
+   feedback(status,removePicture?'Removing your photo…':'Preparing your photo…','pending');
+   try{
+    const next=await prepare();
+    if(!active())return;
+    if(profile?.id===owner){
+     feedback(status,'Saving your photo…','pending');
+     const saved=await run(db().from('profiles').update({avatar:next,updated_at:new Date().toISOString()}).eq('id',owner).select('avatar').single());
+     pic=saved.avatar;
+     profile={...profile,avatar:pic};
+     renderAccountAvatar(me(),profile);
+     if(!active())return;
+     feedback(status,pic?'Profile photo saved.':'Profile photo removed.','success');
+    }else{
+     pic=next;
+     feedback(status,pic?'Photo ready. It will be saved when you create your profile.':'Photo removed from your draft.','success');
+    }
+    form.querySelector('.profile-intro .profile-avatar').outerHTML=avatar({avatar:pic,display_name:$('displayName').value||'You'});
+    remove.hidden=!pic;
+   }catch(error){
+    if(active())feedback(status,error.message||'The photo could not be saved. Try again.','error');
+   }finally{
+    if(active()){photo.value='';setBusy(false);}
    }
-   const width=image.width,height=image.height;
-   if(!width||!height)throw Error('This photo could not be opened.');
-   const canvas=document.createElement('canvas');
-   canvas.width=256;canvas.height=256;
-   const size=Math.min(width,height);
-   canvas.getContext('2d').drawImage(image,(width-size)/2,(height-size)/2,size,size,0,0,256,256);
-   const data=canvas.toDataURL('image/webp',.8);
-   if(!/^data:image\/webp;base64,/.test(data)||data.length>=100000)throw Error('Could not prepare this photo. Try a JPEG or PNG.');
-   if(!active())return;
-   pic=data;
-   document.querySelector('.profile-intro .profile-avatar').outerHTML=avatar({avatar:pic,display_name:$('displayName').value||'You'});
-   status.textContent='Photo ready. Save your profile to apply.';
-  }catch(error){if(active())status.textContent=error.message||'This phone photo could not be opened. Try a JPEG or PNG.';}
-  finally{image?.close?.();if(url)URL.revokeObjectURL(url);if(active())button.disabled=false;}
- };
- $('removePhoto').onclick=()=>{photoRevision++;$('saveProfile').disabled=false;pic=null;document.querySelector('.profile-intro .profile-avatar').outerHTML=avatar({display_name:$('displayName').value});$('profilePhoto').value='';$('photoStatus').textContent='Picture removed. Save your profile to apply.';};
- $('profileForm').onsubmit=async e=>{e.preventDefault();$('saveProfile').disabled=true;try{const owner=me()?.id;const payload=normalizeProfile({username:$('username').value,display_name:$('displayName').value,bio:$('profileBio').value,location:$('profileLocation').value,interests:$('profileInterests').value,avatar:pic,discoverable:$('profileDiscoverable').checked});await run(db().from('profiles').upsert({id:me().id,...payload}));profile={id:me().id,...payload};renderAccountAvatar(me(),profile);$('profileStatus').textContent='Profile saved.';toast('Your profile is saved.');}catch(e){$('profileStatus').textContent=e.message.includes('duplicate')?'That username is already taken. Choose another.':e.message;}finally{if($('saveProfile'))$('saveProfile').disabled=false;}};
+  }
+  async function convertPhoto(jpeg){
+   const session=await run(db().auth.getSession());
+   if(!active()||session.session?.user?.id!==owner)throw Error('Sign in again to save your photo.');
+   const response=await fetch('/api/account',{
+    method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+session.session.access_token},
+    body:JSON.stringify({action:'convert-photo',jpeg})
+   });
+   const result=await response.json();
+   if(!response.ok)throw Error(result.error||'Could not resize your photo. Try again.');
+   return result.avatar;
+  }
+  photo.onchange=()=>{const file=photo.files[0];if(file)return changePhoto(()=>readProfilePhoto(file,convertPhoto));};
+  if(google)google.onclick=()=>changePhoto(()=>importGooglePicture(me(),convertPhoto));
+  remove.onclick=()=>changePhoto(()=>null,true);
+  form.onsubmit=async event=>{
+   event.preventDefault();
+   if(!active()||save.disabled)return;
+   setBusy(true);
+   feedback(profileStatus,'Saving your profile…','pending');
+   try{
+    const payload=normalizeProfile({username:$('username').value,display_name:$('displayName').value,bio:$('profileBio').value,location:$('profileLocation').value,interests:$('profileInterests').value,avatar:pic,discoverable:$('profileDiscoverable').checked});
+    if(profile?.id===owner){
+     // Photo changes save independently. Profile edits must preserve the stored photo.
+     const {avatar:unused,...fields}=payload;
+     profile=await run(db().from('profiles').update(fields).eq('id',owner).select('*').single());
+    }else{
+     await run(db().from('profiles').upsert({id:owner,...payload}));
+     profile={id:owner,...payload};
+    }
+    renderAccountAvatar(me(),profile);
+    if(!active())return;
+    save.textContent='Save profile';
+    if(onboarding){$('modal').close();toast('Your profile is ready.');}
+    else feedback(profileStatus,'Profile saved.','success');
+   }catch(error){
+    if(active()){
+     feedback(profileStatus,error.code==='23505'||error.message?.includes('duplicate')?'That username is already taken. Choose another.':error.message||'Your profile could not be saved. Try again.','error');
+     profileStatus.focus();
+    }
+   }finally{
+    if(active())setBusy(false);
+   }
+  };
  }
  function friendRow(f){const other=f.requester===me().id?f.recipient:f.requester;const p=people.get(other);return `<article class="friend-row">${avatar(p)}<div><strong>${esc(name(other))}</strong><small>@${esc(p?.username||'member')}</small></div><div class="friend-actions">${f.status==='accepted'?`<button data-chat="${other}">Message</button><button data-profile="${other}">View</button>`:f.recipient===me().id?`<button data-accept="${f.id}">Accept</button>`:'<span class="muted">Sent</span>'}<button data-remove="${f.id}">${f.status==='accepted'?'Unfriend':f.recipient===me().id?'Decline':'Cancel'}</button></div></article>`;}
  function friendsPanel(){const accepted=friends.filter(f=>f.status==='accepted'),incoming=friends.filter(f=>f.status==='pending'&&f.recipient===me().id),outgoing=friends.filter(f=>f.status==='pending'&&f.requester===me().id);$('communityContent').innerHTML=`${!profile?'<p class="error">Create your profile before sending friend requests.</p>':''}<div class="community-page-intro"><h3>Study is better together.</h3><p class="muted">Find a person by their exact username. There is no public member directory. They must turn on discovery in their profile.</p></div><section class="community-card"><div class="friend-section-heading"><h3>Find a friend</h3><button type="button" id="friendSignupInvite">Invite a friend</button></div><form id="findFriend" class="inline-form" role="search" autocomplete="off"><label class="sr-only" for="friendUsername">Exact username</label><input id="friendUsername" type="search" name="friend-search-query" enterkeyhint="search" data-1p-ignore data-lpignore="true" placeholder="Username or @username" required maxlength="80" autocapitalize="none" autocomplete="off" spellcheck="false" aria-describedby="friendSearchHelp"><button id="findFriendButton" class="primary">Find friend</button></form><p id="friendSearchHelp" class="muted">Use their exact username, with or without @. They must enable discovery in Profile.</p><div id="friendSearchResult" aria-live="polite"></div></section><h3>Requests for you <small>${incoming.length}</small></h3>${incoming.map(friendRow).join('')||'<div class="community-empty"><strong>You’re all caught up</strong><p>New friend requests will appear here.</p></div>'}<h3>Your friends <small>${accepted.length}</small></h3>${accepted.map(friendRow).join('')||'<div class="community-empty"><strong>A place for your study circle</strong><p>Find a friend above to start sharing verses and encouragement.</p></div>'}<details><summary>Sent requests (${outgoing.length})</summary>${outgoing.map(friendRow).join('')}</details>`;$('friendSignupInvite').onclick=messaging.invite;bindRows();let searchVersion=0;$('findFriend').onsubmit=async e=>{e.preventDefault();const request=++searchVersion,currentPage=page,root=$('friendSearchResult'),button=$('findFriendButton');const active=()=>request===searchVersion&&currentPage===page&&root.isConnected;let username;try{username=normalizeFriendUsername($('friendUsername').value);}catch(error){root.textContent=error.message;return;}
@@ -107,9 +190,33 @@ export function createCommunity({account,state,esc,modal,toast,openVerse,current
   }catch(error){if(form.isConnected){status.textContent=error.message;button.disabled=false;}}
  };
  }
- $('communityButton').onclick=()=>open('friends');document.addEventListener('open-community',e=>open(e.detail));document.addEventListener('share-study-verse',shareVerse);document.addEventListener('study-auth-changed',()=>{page++;profile=null;friends=[];blocks=[];people.clear();messaging.reset();if($('modal').open&&view)$('modal').close();view='';refreshAccountAvatar();});
+ $('communityButton').onclick=()=>open('friends');document.addEventListener('open-community',e=>open(e.detail));document.addEventListener('share-study-verse',shareVerse);let communityOwner=me()?.id||null;document.addEventListener('study-auth-changed',()=>{const owner=me()?.id||null;if(owner===communityOwner)return;communityOwner=owner;page++;profile=null;friends=[];blocks=[];people.clear();messaging.reset();if($('modal').open&&view)$('modal').close();view='';refreshAccountAvatar();});
  if(location.hash==='#contact')setTimeout(()=>{if(me())report('support');else account.signIn();},100);
- async function refreshAccountAvatar(){const owner=me()?.id;renderAccountAvatar(me(),null);if(!owner)return;try{const p=await run(db().from('profiles').select('display_name,username,avatar').eq('id',owner).maybeSingle());if(owner===me()?.id)renderAccountAvatar(me(),p);}catch{/* Keep initials if the profile cannot load. */}}
+ let promptedOwner=null;
+ async function refreshAccountAvatar(){
+  const owner=me()?.id;
+  renderAccountAvatar(me(),null);
+  if(!owner){promptedOwner=null;return;}
+  try{
+   const initialPage=page;
+   const saved=await run(db().from('profiles').select('display_name,username,avatar').eq('id',owner).maybeSingle());
+   if(owner!==me()?.id)return;
+   renderAccountAvatar(me(),profile||saved);
+   if(saved||profile||promptedOwner===owner)return;
+   const dialog=$('modal');
+   if(!dialog||(!dialog.open&&page!==initialPage))return;
+   const prompt=()=>{
+    if(owner!==me()?.id||profile||promptedOwner===owner)return;
+    if(dialog.open){dialog.addEventListener('close',prompt,{once:true});return;}
+    promptedOwner=owner;
+    view='profile';
+    page++;
+    modal('Set up your profile','<div class="community-space" id="communityContent"></div>');
+    profileForm({onboarding:true});
+   };
+   prompt();
+  }catch{/* Keep initials if the profile cannot load. */}
+ }
  refreshAccountAvatar();
  return {open,shareVerse};
 }

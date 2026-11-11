@@ -1,9 +1,33 @@
 import {createClient} from '@supabase/supabase-js';
 export function sameOrigin(req){try{return new URL(req.headers.origin).host===req.headers.host;}catch{return false;}}
+async function convertPhoto(req,res,makeClient){
+ const jpeg=req.body.jpeg;
+ if(typeof jpeg!=='string'||jpeg.length>=150000||!/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(jpeg))
+  return res.status(400).json({error:'Choose a supported profile photo.'});
+ const token=req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
+ if(!token)return res.status(401).json({error:'Sign in to save your photo.'});
+ const url=process.env.SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL;
+ const key=process.env.SUPABASE_PUBLISHABLE_KEY||process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY||process.env.SUPABASE_ANON_KEY;
+ if(!url||!key)return res.status(503).json({error:'Photo service is unavailable. Try again later.'});
+ try{
+  const client=makeClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
+  const {data,error}=await client.auth.getUser(token);
+  if(error||!data?.user)return res.status(401).json({error:'Session expired. Sign in again.'});
+  const {default:sharp}=await import('sharp');
+  const image=sharp(Buffer.from(jpeg.slice(jpeg.indexOf(',')+1),'base64'),{limitInputPixels:256*256});
+  const {format,width,height}=await image.metadata();
+  if(format!=='jpeg'||width!==256||height!==256)return res.status(400).json({error:'Choose a supported profile photo.'});
+  const encoded=await image.webp({quality:78}).toBuffer();
+  const avatar='data:image/webp;base64,'+encoded.toString('base64');
+  if(avatar.length>=100000)return res.status(422).json({error:'Your photo is still too large after resizing. Try another photo.'});
+  return res.status(200).json({avatar});
+ }catch{return res.status(422).json({error:'Your photo could not be resized. Try another photo.'});}
+}
 export function createAccountHandler(makeClient=createClient){return async function handler(req,res){
  res.setHeader('Cache-Control','private, no-store');
  if(req.method!=='POST')return res.status(405).json({error:'Method not allowed'});
  if(!sameOrigin(req))return res.status(403).json({error:'Request must come from this site'});
+ if(req.body?.action==='convert-photo')return convertPhoto(req,res,makeClient);
  if(req.body?.action!=='delete'||req.body?.confirmation!=='DELETE')return res.status(400).json({error:'Explicit account deletion confirmation required'});
  const confirmed=req.body?.accountId;
  if(typeof confirmed!=='string'||!/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(confirmed))return res.status(400).json({error:'Confirm the account you intend to delete.'});
