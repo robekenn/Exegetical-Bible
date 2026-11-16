@@ -3,12 +3,15 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {JSDOM} from 'jsdom';
+import {compareBibleReferences} from '../book-navigation.js';
+import * as syncModel from '../sync-model.js';
 
 test('notebook groups consecutive saved highlights and opens the first verse', async () => {
  const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
  const dom=new JSDOM(html,{url:'https://example.test/',runScripts:'outside-only'});
  try{
   const context=dom.getInternalVMContext(),document=dom.window.document;
+  Object.assign(context,{compareBibleReferences,...syncModel});
   const modal=document.getElementById('modal');
   modal.showModal=()=>{modal.open=true;};
   modal.close=()=>{modal.open=false;};
@@ -16,6 +19,7 @@ test('notebook groups consecutive saved highlights and opens the first verse', a
   code=code.replace(/^import .*;\n/gm,'');
   vm.runInContext(code.slice(0,code.lastIndexOf('start().catch')),context);
   vm.runInContext(`
+   state.chapter=3;
    state.books=[{id:'JHN',name:'John',numberOfChapters:21}];
    state.highlights={'JHN.3.18':true,'JHN.3.16':true,'JHN.3.17':true,'JHN.3.19':false,'JHN.3.20':true,'JHN.4.1':true};
    state.notes={'JHN.3.16':{book:'JHN',bookName:'John',chapter:3,verse:16,text:'Personal note',updatedAt:'2026-11-04'}};
@@ -30,6 +34,10 @@ test('notebook groups consecutive saved highlights and opens the first verse', a
   assert.match(document.getElementById('noteList').textContent,/Personal note/);
   document.querySelector('[data-notebook-view="highlights"]').click();
   const labels=()=>[...document.querySelectorAll('[data-highlight-card] h3')].map(heading=>heading.textContent);
+  assert.deepEqual(labels(),['John 3:16–18','John 3:20']);
+  const scope=document.getElementById('notebookScope');
+  scope.value='book';
+  scope.dispatchEvent(new dom.window.Event('change'));
   assert.deepEqual(labels(),['John 3:16–18','John 3:20','John 4:1']);
   await new Promise(resolve=>setImmediate(resolve));
   const card=document.querySelector('[data-highlight-card]');
@@ -38,14 +46,14 @@ test('notebook groups consecutive saved highlights and opens the first verse', a
   assert.match(text,/Synthetic verse 16— continued/);
   assert.match(card.querySelector('[data-highlight-notes]').textContent,/Personal note/);
   card.querySelector('[data-add-highlight-note]').click();
-  const editor=card.querySelector('form');
+  const editor=card.querySelector('.highlight-note-form');
   editor.elements.text.value='Note from the highlight card';
   editor.elements.text.dispatchEvent(new dom.window.Event('input'));
   document.getElementById('closeModal').click();
   document.getElementById('notebookNav').click();
   const reopened=document.querySelector('[data-highlight-card]');
   reopened.querySelector('[data-add-highlight-note]').click();
-  const restored=reopened.querySelector('form');
+  const restored=reopened.querySelector('.highlight-note-form');
   assert.equal(restored.elements.text.value,'Note from the highlight card');
   restored.dispatchEvent(new dom.window.Event('submit',{cancelable:true}));
   assert.equal(vm.runInContext("state.notes['JHN.3.16-18'].text",context),'Note from the highlight card');

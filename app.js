@@ -1,3 +1,4 @@
+import {newHighlight,parseNotebookTags,validatePayload,validHighlightDetails,studyEntryCopyConflicts,withExistingTags} from './sync-model.js';
 import {setupBookSidebar,compareBibleReferences,testamentOf} from './book-navigation.js';
 import {setupForegroundScroll} from './foreground-scroll.js';
 import {setupPassageHighlights} from './passage-highlights.js';
@@ -87,7 +88,10 @@ const verses=()=>state.data?.chapter.content.filter(v=>v.type==='verse')||[];
 function toast(t){$('toast').textContent=t;$('toast').style.display='block';clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').style.display='none',4000);}
 function modal(title,html){document.dispatchEvent(new CustomEvent('study-modal-open'));$('modalTitle').textContent=title;$('modalBody').innerHTML=html;if(!$('modal').open)$('modal').showModal();}
 $('closeModal').onclick=()=>$('modal').close();
-$('modal').addEventListener('click',e=>{if(e.target===$('modal')){const r=$('modal').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('modal').close();}});
+$('modal').addEventListener('click',e=>{if(e.target===$('modal')&&!$('modalBody').querySelector('.auth-flow')){const r=$('modal').getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)$('modal').close();}});
+$('modal').addEventListener('close',()=>{
+ if(!$('modal').open)$('authForm')?.reset();
+});
 function showError(target,error,retry){target.innerHTML=`<div class="resource-error" role="alert"><h3>This resource couldn’t open.</h3><p>${esc(error.name==='TimeoutError'?'The request took too long. Check your connection and try again.':error.message)}</p><button class="retry primary">Try again ↻</button><p class="muted"><a href="/contact/">Get help</a></p></div>`;target.querySelector('.retry').onclick=retry;}
 function renderBooks(){bookNavigation?.render();}
 function selectors(){ $('bookSelect').innerHTML=state.books.map(b=>`<option value="${esc(b.id)}">${esc(b.name)}</option>`).join('');$('bookSelect').value=state.book;const b=book();$('chapterSelect').innerHTML=Array.from({length:b?.numberOfChapters||1},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');$('chapterSelect').value=state.chapter;renderBooks();}
@@ -659,7 +663,7 @@ function renderNotes(quote){
  editor.oninput=()=>{
   if(!canEdit())return;
   const text=editor.value;
-  if(text.trim())state.notes[k]={text,book:state.book,bookName:book().name,chapter:state.chapter,verse:first,...(range?{endVerse:last}:{}),updatedAt:new Date().toISOString()};
+  if(text.trim())state.notes[k]={...(state.notes[k]?.tags?{tags:state.notes[k].tags}:{}),text,book:state.book,bookName:book().name,chapter:state.chapter,verse:first,...(range?{endVerse:last}:{}),updatedAt:new Date().toISOString()};
   else delete state.notes[k];
   $('saveStatus').textContent=saveNote()?(account?.status()||'Saved on this device.'):'Could not save. Export a backup before leaving.';
  };
@@ -668,7 +672,7 @@ function renderNotes(quote){
   for(const verse of passage){
    const highlightKey=noteKey(state.book,state.chapter,verse.number);
    if(allHighlighted)delete state.highlights[highlightKey];
-   else state.highlights[highlightKey]=true;
+   else if(!state.highlights[highlightKey])state.highlights[highlightKey]=newHighlight();
   }
   save('exegetical-highlights',state.highlights);
   renderChapter();
@@ -1091,23 +1095,55 @@ function exportNotes(){
  }catch(error){toast(error.message);}
 }
 function highlightedPassages(highlights){
- const verses=Object.entries(highlights).flatMap(([key,highlighted])=>{
-  const match=highlighted===true&&/^([A-Z0-9]{3})\.([1-9]\d{0,2})\.([1-9]\d{0,2})$/.exec(key);
-  return match?[{book:match[1],chapter:Number(match[2]),first:Number(match[3])}]:[];
+ const verses=Object.entries(highlights).flatMap(([key,highlight])=>{
+  const match=highlight&&/^([A-Z0-9]{3})\.([1-9]\d{0,2})\.([1-9]\d{0,2})$/.exec(key);
+  return match?[{book:match[1],chapter:Number(match[2]),verse:Number(match[3]),key,
+   tags:highlight.tags||[],updatedAt:highlight.updatedAt||''}]:[];
  });
- const order=new Map(state.books.map((book,index)=>[book.id,index]));
- verses.sort((a,b)=>(order.get(a.book)??Infinity)-(order.get(b.book)??Infinity)
-  ||a.book.localeCompare(b.book)||a.chapter-b.chapter||a.first-b.first);
+ verses.sort(compareBibleReferences);
  const passages=[];
  for(const verse of verses){
   const previous=passages.at(-1);
-  if(previous?.book===verse.book&&previous.chapter===verse.chapter&&previous.last+1===verse.first){
-   previous.last=verse.first;
+  if(previous?.book===verse.book&&previous.chapter===verse.chapter&&previous.last+1===verse.verse){
+   previous.last=verse.verse;
+   previous.keys.push(verse.key);
+   for(const tag of verse.tags)if(!previous.tags.some(value=>value.toLowerCase()===tag.toLowerCase()))previous.tags.push(tag);
+   if(verse.updatedAt>previous.updatedAt)previous.updatedAt=verse.updatedAt;
   }else{
-   passages.push({...verse,last:verse.first});
+   passages.push({...verse,first:verse.verse,last:verse.verse,keys:[verse.key],tags:[...verse.tags]});
   }
  }
  return passages;
+}
+
+function notebookTagsMarkup(tags=[]){
+ return tags.length?`<ul class="notebook-tags" aria-label="Tags">${tags.map(tag=>`<li>${esc(tag)}</li>`).join('')}</ul>`:'';
+}
+
+function notebookTagEditor(tags=[],group=false){
+ return `<details class="notebook-tag-editor">
+  <summary>${tags.length?'Edit tags':'Add tags'}</summary>
+  <form data-notebook-tags>
+   <label>Tags <input class="full-input" name="tags" maxlength="${Math.max(510,tags.join(', ').length)}" value="${esc(tags.join(', '))}" placeholder="Personal application, Encouragement"></label>
+   <p class="muted">Separate tags with commas.${group?' Saving applies these tags to every verse in this highlight.':''}</p>
+   <button type="submit" class="primary">Save tags</button>
+   <p role="status" class="muted"></p>
+  </form>
+ </details>`;
+}
+
+function bindNotebookTags(card,isCurrent,update){
+ const form=card.querySelector('[data-notebook-tags]');
+ form.onsubmit=event=>{
+  event.preventDefault();
+  if(!isCurrent())return;
+  const status=form.querySelector('[role="status"]');
+  try{
+   if(account&&!account.canEdit())throw Error('Load your account before editing tags.');
+   const tags=parseNotebookTags(form.elements.tags.value);
+   update(tags);
+  }catch(error){status.textContent=error.message;}
+ };
 }
 
 // Drafts stay in this tab and are scoped to the active account or guest.
@@ -1154,7 +1190,7 @@ function highlightNoteForm(card,passage,refreshNotes){
    return;
   }
   if(!text.value.trim()){message.textContent='Enter a note before saving.';return;}
-  state.notes[key]={text:text.value,book:passage.book,bookName:passage.name,chapter:passage.chapter,verse:passage.first,...(passage.last>passage.first?{endVerse:passage.last}:{}),updatedAt:new Date().toISOString()};
+  state.notes[key]={...(state.notes[key]?.tags?{tags:state.notes[key].tags}:{}),text:text.value,book:passage.book,bookName:passage.name,chapter:passage.chapter,verse:passage.first,...(passage.last>passage.first?{endVerse:passage.last}:{}),updatedAt:new Date().toISOString()};
   const saved=save('exegetical-notes',state.notes);
   noteCount();
   renderChapter();
@@ -1170,7 +1206,7 @@ function highlightNoteForm(card,passage,refreshNotes){
  text.focus();
 }
 
-function renderHighlightCards(list,passages){
+function renderHighlightCards(list,passages,onTagsSaved){
  const translation=state.translation;
  const chapterRequests=new Map();
  const reported=new Set();
@@ -1182,6 +1218,8 @@ function renderHighlightCards(list,passages){
    <button type="button" data-add-highlight-note aria-label="Add or edit a note for ${esc(passage.label)}">Note</button>
    <button type="button" data-highlight-passage aria-label="Jump to ${esc(passage.label)}">Read ↗</button>
   </div>
+  ${notebookTagsMarkup(passage.tags)}
+  ${notebookTagEditor(passage.tags,passage.keys.length>1)}
   <div data-note-editor hidden></div>
  </article>`).join('');
  list.querySelectorAll('[data-highlight-card]').forEach(card=>{
@@ -1190,6 +1228,14 @@ function renderHighlightCards(list,passages){
   const text=card.querySelector('[data-highlight-text]');
   const notes=card.querySelector('[data-highlight-notes]');
   const current=()=>card.isConnected&&$('modal').open;
+  const originalTags=passage.keys.map(key=>JSON.stringify(state.highlights[key]?.tags||[]));
+  bindNotebookTags(card,current,tags=>{
+   if(!passage.keys.every((key,index)=>state.highlights[key]&&JSON.stringify(state.highlights[key].tags||[])===originalTags[index]))throw Error('This highlight changed. Reopen the notebook to see the latest version.');
+   const highlight={tags,updatedAt:new Date().toISOString()};
+   for(const key of passage.keys)state.highlights[key]=highlight;
+   const saved=save('exegetical-highlights',state.highlights);
+   onTagsSaved(saved);
+  });
   function refreshNotes(){
    const entries=Object.values(state.notes)
     .filter(note=>note.text&&note.book===passage.book&&note.chapter===passage.chapter&&note.verse<=passage.last&&(note.endVerse??note.verse)>=passage.first)
@@ -1260,36 +1306,71 @@ function notebook(){
   <button type="button" data-notebook-view="highlights">Highlights</button>
  </div>
  <div class="button-row"><button id="exportNotes">Export backup</button><button id="importNotes">Import backup</button><input id="importFile" type="file" accept="application/json,.json" hidden></div>
- <input id="noteSearch" class="full-input" type="search"><div id="noteList"></div>`);
- const search=$('noteSearch'),list=$('noteList');
+ <div class="notebook-filters">
+  <label>Passage <select id="notebookScope"><option value="chapter">This chapter</option><option value="book">This book</option><option value="all">All</option></select></label>
+  <label>Tag <select id="notebookTag"><option value="">All tags</option></select></label>
+  <label>Sort by <select id="notebookSort"><option value="bible">Bible order</option><option value="recent">Most recently edited</option></select></label>
+ </div>
+ <input id="noteSearch" class="full-input" type="search" aria-describedby="notebookScopeStatus">
+ <p id="notebookScopeStatus" class="muted" role="status"></p>
+ <div id="noteList"></div>`);
+ const readerBook=state.book,readerChapter=state.chapter;
+ const currentBook=book()?.name||readerBook;
+ const search=$('noteSearch'),list=$('noteList'),scope=$('notebookScope'),tag=$('notebookTag'),sort=$('notebookSort');
  const controls=$('modalBody').querySelectorAll('[data-notebook-view]');
  let highlightPage=0,searchTimer;
  const pageSize=8;
+ const bookNames=new Map([...Object.values(state.notes).map(note=>[note.book,note.bookName]),...state.books.map(book=>[book.id,book.name])]);
+ const sortEntries=(a,b)=>(sort.value==='recent'?(b.updatedAt||'').localeCompare(a.updatedAt||''):0)||compareBibleReferences(a,b);
+ const hasTag=(item,value)=>item.tags?.some(t=>t.toLowerCase()===value);
+
  function render(){
   const viewingHighlights=notebookView==='highlights';
   const label=viewingHighlights?'Search highlights':'Search notes';
   search.placeholder=label+'…';
   search.setAttribute('aria-label',label);
   controls.forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.notebookView===notebookView)));
-  const q=normalizeNoteSearch(search.value);
+  const query=normalizeNoteSearch(search.value);
+  scope.disabled=Boolean(query);
+  $('notebookScopeStatus').textContent=query?'Searching all books and chapters.':scope.value==='chapter'
+   ?`Showing ${currentBook} ${readerChapter}.`:scope.value==='book'?`Showing all of ${currentBook}.`:'Showing all books and chapters.';
+  const entries=viewingHighlights?highlightedPassages(state.highlights).map(passage=>{
+   const name=bookNames.get(passage.book)||passage.book;
+   const range=passage.first===passage.last?String(passage.first):`${passage.first}–${passage.last}`;
+   return {...passage,name,label:`${name} ${passage.chapter}:${range}`};
+  }):Object.entries(state.notes).filter(([,note])=>note.text).map(([key,note])=>({...note,key,label:`${note.bookName} ${note.chapter}:${noteVerseLabel(note)}`}));
+  const selectedTag=tag.value;
+  const availableTags=new Map();
+  for(const entry of entries)for(const value of entry.tags||[])availableTags.set(value.toLowerCase(),value);
+  tag.replaceChildren(new Option('All tags',''),...[...availableTags].sort(([,a],[,b])=>a.localeCompare(b)).map(([key,value])=>new Option(value,key)));
+  if(availableTags.has(selectedTag))tag.value=selectedTag;
+
+  const matches=entries.filter(item=>{
+   if(tag.value&&!hasTag(item,tag.value))return false;
+   if(query)return normalizeNoteSearch(`${item.label} ${item.book} ${item.text||''} ${(item.tags||[]).join(' ')}`).includes(query);
+   return scope.value==='all'||item.book===readerBook&&(scope.value==='book'||item.chapter===readerChapter);
+  }).sort(sortEntries);
+  if(!matches.length){
+   const kind=viewingHighlights?'highlights':'notes';
+   list.innerHTML=`<p class="muted">${query||tag.value?`No matching ${kind}.`:scope.value==='all'?`No ${kind} yet.`:`No ${kind} in this ${scope.value} yet.`}</p>
+    ${!query&&scope.value==='chapter'?'<button type="button" data-widen-scope="book">Show this book</button>':''}
+    ${!query&&scope.value!=='all'?'<button type="button" data-widen-scope="all">Show all</button>':''}`;
+   list.querySelectorAll('[data-widen-scope]').forEach(button=>button.onclick=()=>{
+    scope.value=button.dataset.widenScope;
+    refreshList();
+    scope.focus();
+   });
+   return;
+  }
   if(viewingHighlights){
-   const names=new Map(Object.values(state.notes).map(note=>[note.book,note.bookName]));
-   const passages=highlightedPassages(state.highlights).map(passage=>{
-    const name=state.books.find(book=>book.id===passage.book)?.name||names.get(passage.book)||passage.book;
-    const range=passage.first===passage.last?String(passage.first):`${passage.first}–${passage.last}`;
-    return {...passage,name,label:`${name} ${passage.chapter}:${range}`};
-   }).filter(passage=>`${passage.label} ${passage.book}`.toLowerCase().includes(q));
-   if(!passages.length){
-    list.innerHTML=`<p class="muted">${q?'No matching highlights.':'No highlights yet.'}</p>`;
-    return;
-   }
+   highlightPage=Math.min(highlightPage,Math.ceil(matches.length/pageSize)-1);
    const start=highlightPage*pageSize;
-   renderHighlightCards(list,passages.slice(start,start+pageSize));
-   if(passages.length>pageSize){
+   renderHighlightCards(list,matches.slice(start,start+pageSize),tagsSaved);
+   if(matches.length>pageSize){
     list.insertAdjacentHTML('beforeend',`<div class="button-row">
      <button type="button" data-highlight-page="-1"${start===0?' disabled':''}>Previous</button>
-     <span>Page ${highlightPage+1} of ${Math.ceil(passages.length/pageSize)}</span>
-     <button type="button" data-highlight-page="1"${start+pageSize>=passages.length?' disabled':''}>Next</button>
+     <span>Page ${highlightPage+1} of ${Math.ceil(matches.length/pageSize)}</span>
+     <button type="button" data-highlight-page="1"${start+pageSize>=matches.length?' disabled':''}>Next</button>
     </div>`);
     list.querySelectorAll('[data-highlight-page]').forEach(button=>button.onclick=()=>{
      highlightPage+=Number(button.dataset.highlightPage);
@@ -1299,10 +1380,23 @@ function notebook(){
    }
    return;
   }
-  const entries=Object.entries(state.notes).sort((a,b)=>(b[1].updatedAt||'').localeCompare(a[1].updatedAt||''));
-  list.innerHTML=entries.filter(([,note])=>normalizeNoteSearch(`${note.text} ${note.bookName} ${note.chapter}:${noteVerseLabel(note)}`).includes(q))
-   .map(([key,note])=>`<article class="notebook-entry"><button type="button" data-note="${esc(key)}">${esc(note.bookName)} ${esc(note.chapter)}:${esc(noteVerseLabel(note))} ↗</button> <button type="button" data-share-note="${esc(key)}">Share note</button><p>${esc(note.text)}</p><small class="muted">${esc(new Date(note.updatedAt).toLocaleDateString())}</small></article>`).join('')
-   ||`<p class="muted">${q?'No matching notes.':'No notes yet.'}</p>`;
+  list.innerHTML=matches.map(note=>`<article class="notebook-entry">
+   <button type="button" data-note="${esc(note.key)}">${esc(note.label)} ↗</button>
+   <button type="button" data-share-note="${esc(note.key)}">Share note</button>
+   <p>${esc(note.text)}</p>
+   <small class="muted">${esc(new Date(note.updatedAt).toLocaleDateString())}</small>
+   ${notebookTagsMarkup(note.tags)}
+   ${notebookTagEditor(note.tags)}
+  </article>`).join('');
+  list.querySelectorAll('.notebook-entry').forEach((card,index)=>{
+   const {key,tags:original}=matches[index];
+   bindNotebookTags(card,()=>card.isConnected&&$('modal').open,tags=>{
+    const note=state.notes[key];
+    if(!note?.text||JSON.stringify(note.tags||[])!==JSON.stringify(original||[]))throw Error('These tags changed. Reopen the notebook to see the latest version.');
+    state.notes[key]={...note,tags,updatedAt:new Date().toISOString()};
+    tagsSaved(save('exegetical-notes',state.notes));
+   });
+  });
   list.querySelectorAll('[data-share-note]').forEach(button=>button.onclick=()=>{
    const note=state.notes[button.dataset.shareNote];
    if(!note?.text)return;
@@ -1311,7 +1405,7 @@ function notebook(){
   });
   list.querySelectorAll('[data-note]').forEach(button=>button.onclick=async()=>{
    const note=state.notes[button.dataset.note];
-   if(!state.books.some(book=>book.id===note.book&&note.chapter<=book.numberOfChapters)){
+   if(!note||!state.books.some(book=>book.id===note.book&&note.chapter<=book.numberOfChapters)){
     toast('This passage is unavailable in your current translation.');
     return;
    }
@@ -1321,13 +1415,24 @@ function notebook(){
    if(state.data&&state.book===note.book&&state.chapter===note.chapter)openPassageStudy();
   });
  }
+ function refreshList(){
+  clearTimeout(searchTimer);
+  highlightPage=0;
+  render();
+ }
+ function tagsSaved(saved){
+  render();
+  tag.focus();
+  toast(saved?'Tags saved.':'Could not save tags on this device. Export a backup before leaving.');
+ }
+ scope.onchange=tag.onchange=sort.onchange=refreshList;
  controls.forEach(button=>button.onclick=()=>{
   if(notebookView===button.dataset.notebookView)return;
   clearTimeout(searchTimer);
   notebookView=button.dataset.notebookView;
   search.value='';
-  highlightPage=0;
-  render();
+  tag.value='';
+  refreshList();
  });
  search.oninput=()=>{
   clearTimeout(searchTimer);
@@ -1337,7 +1442,51 @@ function notebook(){
   }else render();
  };
  render();
- $('exportNotes').onclick=exportNotes;$('importNotes').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{try{if(account&&!account.canEdit())throw Error('Load your account before importing.');const owner=account?.getUser()?.id;const file=e.target.files[0];if(!file)return;if(file.size>backupLimit)throw Error('Please choose a backup smaller than 5 MB.');const d=JSON.parse(await file.text());if(account?.getUser()?.id!==owner||(account&&!account.canEdit()))throw Error('Account changed. Reopen the notebook before importing.');if(d.format!=='exegetical-backup'||d.version!==1||!d.notes||typeof d.notes!=='object'||Array.isArray(d.notes))throw Error('This is not a valid Exegetical backup.');const imported={};for(const [k,n]of Object.entries(d.notes)){if(!/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}(?:-[1-9]\d{0,2})?$/.test(k)||!n||typeof n.text!=='string'||n.text.length>200000||typeof n.bookName!=='string'||!Number.isInteger(n.chapter)||!Number.isInteger(n.verse)||(n.endVerse!==undefined&&(!Number.isInteger(n.endVerse)||n.endVerse<=n.verse))||noteKey(n.book,n.chapter,n.verse,n.endVerse)!==k||typeof n.updatedAt!=='string'||!Number.isFinite(Date.parse(n.updatedAt)))throw Error('The backup contains invalid notes.');imported[k]=n;}let conflicts=Object.keys(imported).filter(k=>state.notes[k]&&state.notes[k].text!==imported[k].text);if(conflicts.length&&!confirm(`This backup replaces ${conflicts.length} existing note(s). Continue?`))return;state.notes={...state.notes,...imported};if(d.highlights&&typeof d.highlights==='object')for(const [k,v]of Object.entries(d.highlights))if(/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}$/.test(k)&&v===true)state.highlights[k]=true;save('exegetical-notes',state.notes);save('exegetical-highlights',state.highlights);noteCount();renderChapter();renderStudy();notebook();toast('Backup imported.');}catch(error){toast(error.message||'Could not import this backup.');}};}
+ $('exportNotes').onclick=exportNotes;
+ const input=$('importFile');
+ $('importNotes').onclick=()=>input.click();
+ input.onchange=async()=>{
+  try{
+   if(account&&!account.canEdit())throw Error('Load your account before importing.');
+   const owner=account?.getUser()?.id;
+   const file=input.files[0];
+   if(!file)return;
+   if(file.size>backupLimit)throw Error('Please choose a backup smaller than 5 MB.');
+   const data=JSON.parse(await file.text());
+   if(!input.isConnected||!$('modal').open||account?.getUser()?.id!==owner||(account&&!account.canEdit()))throw Error('Reopen the notebook before importing.');
+   if(data?.format!=='exegetical-backup'||data.version!==1||!data.notes||typeof data.notes!=='object'||Array.isArray(data.notes))throw Error('This is not a valid Exegetical backup.');
+   const notes={};
+   for(const [key,note]of Object.entries(data.notes)){
+    if(!validatePayload(key,note)||typeof note.updatedAt!=='string'||!Number.isFinite(Date.parse(note.updatedAt)))throw Error('The backup contains invalid notes.');
+    notes[key]=withExistingTags(note,state.notes[key]);
+   }
+   const highlights={};
+   if(data.highlights&&typeof data.highlights==='object'){
+    for(const [key,value]of Object.entries(data.highlights)){
+     if(!/^[A-Z0-9]{3}\.[1-9]\d{0,2}\.[1-9]\d{0,2}$/.test(key))continue;
+     if(validHighlightDetails(value))highlights[key]=value;
+     else if(value===true&&!state.highlights[key])highlights[key]=true;
+    }
+   }
+   const conflicts=Object.entries(notes).filter(([key,note])=>studyEntryCopyConflicts(state.notes[key],note)).length
+    +Object.entries(highlights).filter(([key,highlight])=>studyEntryCopyConflicts(state.highlights[key],highlight)).length;
+   if(conflicts&&!confirm(`This backup replaces ${conflicts} existing notebook entries. Continue?`))return;
+   state.notes={...state.notes,...notes};
+   Object.assign(state.highlights,highlights);
+   const notesSaved=save('exegetical-notes',state.notes);
+   const highlightsSaved=save('exegetical-highlights',state.highlights);
+   noteCount();
+   renderChapter();
+   renderStudy();
+   refreshList();
+   toast(notesSaved&&highlightsSaved?'Backup imported.':'Backup loaded, but storage is unavailable. Keep your original backup.');
+  }catch(error){
+   toast(error.message||'Could not import this backup.');
+  }finally{
+   input.value='';
+  }
+ };
+}
 document.addEventListener('study-auth-changed',()=>{
  highlightDrafts.clear();
  if(!$('noteList'))return;

@@ -484,3 +484,13 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 .profile-photo-actions button{min-height:40px}
 #photoStatus{font-size:13px}
 #profileForm .profile-save{margin:12px 0 0}
+
+.notebook-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:10px;margin:14px 0}
+.notebook-filters label,.notebook-tag-editor label{display:grid;gap:5px;font-size:13px;font-weight:600;min-width:0}
+.notebook-filters select{width:100%;min-height:44px;font-size:16px}
+.notebook-tags{display:flex;flex-wrap:wrap;gap:6px;list-style:none;padding:0;margin:10px 0}
+.notebook-tags li{max-width:100%;overflow-wrap:anywhere;padding:4px 9px;border-radius:12px;background:var(--soft);color:var(--accent);font-size:12px}
+.notebook-tag-editor{margin-top:10px}
+.notebook-tag-editor summary{width:fit-content;cursor:pointer;color:var(--accent);padding:8px 0;font-weight:600}
+.notebook-tag-editor form{padding:12px 0 4px}
+.notebook-tag-editor input{font-size:16px}

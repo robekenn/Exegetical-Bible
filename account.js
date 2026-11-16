@@ -6,7 +6,7 @@ import {clearAccountCache} from './security-model.js';
 import {revealAdminButton} from './account-access.js';
 import {persistentCookieOptions} from './session-options.js';
 import {createBrowserClient,parseCookieHeader,serializeCookieHeader} from '/vendor/supabase.js';
-import {payloadFor,recordsToState,validatePayload,mergeRemoteStudy} from './sync-model.js';
+import {applyStudyPayload,studyEntryCopyConflicts,withExistingTags,payloadFor,recordsToState,validatePayload,mergeRemoteStudy} from './sync-model.js';
 export async function createAccount({state,esc,modal,toast,refresh,applyPreferences,getPreferences,localRead,localWrite,applyFavorites=()=>{},exportBackup=()=>{}}){
  const $=id=>document.getElementById(id);
  const callbackFailed=location.pathname==='/auth/callback'&&(new URLSearchParams(location.hash.slice(1)).has('error')||new URLSearchParams(location.search).has('error'));
@@ -89,7 +89,7 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
  const rows=[];for(let offset=0;;offset+=1000){const {data,error}=await client.from('study_entries').select('*').eq('user_id',user.id).order('passage').range(offset,offset+999);if(error)throw error;rows.push(...data);if(data.length<1000)break;}
  if(id!==epoch)return;for(const r of rows)revisions.set(r.passage,Number(r.revision));const cloud=recordsToState(rows);
  // Pending edits retain their original base revision across reloads, so stale edits conflict safely.
- const savedRevs=localRead(prefix()+'-revisions',{});for(const [k,p]of dirty){revisions.set(k,Number(savedRevs[k]||0));if(p.text)cloud.notes[k]=p;else delete cloud.notes[k];if(p.highlighted)cloud.highlights[k]=true;else delete cloud.highlights[k];}
+ const savedRevs=localRead(prefix()+'-revisions',{});for(const [k,p]of dirty){revisions.set(k,Number(savedRevs[k]||0));applyStudyPayload(k,p,cloud.notes,cloud.highlights);}
  state.notes=cloud.notes;state.highlights=cloud.highlights;lastSnapshot=currentPayloads();ready=true;cache();refresh();display();
  const {data:prefs,error}=await readPreferences(next.id);
  if(id!==epoch)return;
@@ -268,8 +268,39 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
    }
   };
  }
- async function resolve(k){const id=epoch;const {data,error}=await client.from('study_entries').select('*').eq('user_id',user.id).eq('passage',k).maybeSingle();if(error||id!==epoch){toast('Could not load the other version. Try again.');return;}const local=dirty.get(k);modal('Choose the note to keep',`<p class="muted">${esc(k)} changed on another device. Neither version will be overwritten until you choose.</p><h3>Your device</h3><p class="conflict-note">${esc(local?.text||'(No note)')}</p><h3>Saved account version</h3><p class="conflict-note">${esc(data?.payload?.text||'(No note)')}</p><div class="button-row"><button id="keepLocal">Keep this device’s version</button><button id="keepCloud">Use account version</button></div>`);$('keepLocal').onclick=()=>{revisions.set(k,Number(data?.revision||0));rememberRevisions();conflicts.delete(k);$('modal').close();push();};$('keepCloud').onclick=()=>{dirty.delete(k);conflicts.delete(k);revisions.set(k,Number(data?.revision||0));if(data?.payload.text)state.notes[k]=data.payload;else delete state.notes[k];if(data?.payload.highlighted)state.highlights[k]=true;else delete state.highlights[k];lastSnapshot=currentPayloads();cache();refresh();display();$('modal').close();};}
- function accountPanel(){if(!user)return authForm();modal('My account',accountMenu({email:user.email,status:saveState().detail,needsAttention:saveState().attention,saving:saveState().saving,avatar:$('accountButton').querySelector('img')?.getAttribute('src')||'',initial:$('accountButton').querySelector('.account-initial')?.textContent||'Y',conflicts:[...conflicts],esc}));const adminButton=$('adminPortal'),owner=user.id;adminButton.onclick=()=>location.assign('/admin/');revealAdminButton(adminButton,client,()=>user?.id===owner&&$('adminPortal')===adminButton);$('editProfile').onclick=()=>document.dispatchEvent(new CustomEvent('open-community',{detail:'profile'}));$('openFriends').onclick=()=>document.dispatchEvent(new CustomEvent('open-community',{detail:'friends'}));$('accountSignOut').onclick=signOut;$('retrySync').onclick=async()=>{$('modal').close();if(!ready){const {data}=await client.auth.getSession();user=null;loadCloud(data.session);}else{syncError='';await push();await preferenceSync?.flush();if(!dirty.size&&!preferenceSync?.pending){const {data}=await client.auth.getSession();loadCloud(data.session,true);}}};$('importDevice').onclick=()=>{if(!ready)return toast('Load your account before importing.');const keys=new Set([...Object.keys(device.notes),...Object.keys(device.highlights)]);if(!keys.size)return toast('No guest notes or highlights to copy.');let overlaps=[...keys].filter(k=>state.notes[k]&&device.notes[k]&&state.notes[k].text!==device.notes[k].text);if(overlaps.length&&!confirm(`Replace ${overlaps.length} conflicting account note(s) with guest notes? Export a backup first if you need both versions.`))return;for(const k of keys){if(device.notes[k])state.notes[k]=device.notes[k];if(device.highlights[k])state.highlights[k]=true;}mutate();refresh();$('modal').close();toast('Guest notes copied; syncing to your account.');};document.querySelectorAll('[data-conflict]').forEach(b=>b.onclick=()=>resolve(b.dataset.conflict));}
+ async function resolve(key){
+  const id=epoch;
+  const {data,error}=await client.from('study_entries').select('*').eq('user_id',user.id).eq('passage',key).maybeSingle();
+  if(error||id!==epoch){toast('Could not load the other version. Try again.');return;}
+  const local=dirty.get(key),remote=data?.payload;
+  if(remote&&!validatePayload(key,remote)){toast('Could not read the saved version.');return;}
+  const describe=payload=>`<p class="conflict-note">${esc(payload?.text||'(No note)')}</p>
+   ${payload?.tags?.length?`<p>Note tags · ${esc(payload.tags.join(', '))}</p>`:''}
+   <p>${payload?.highlighted?'Highlighted':'No highlight'}${payload?.highlight?.tags?.length?` · ${esc(payload.highlight.tags.join(', '))}`:''}</p>`;
+  modal('Choose the version to keep',`<p class="muted">${esc(key)} changed on another device. Neither version will be overwritten until you choose.</p>
+   <h3>Your device</h3>${describe(local)}
+   <h3>Saved account version</h3>${describe(remote)}
+   <div class="button-row"><button id="keepLocal">Keep this device’s version</button><button id="keepCloud">Use account version</button></div>`);
+  $('keepLocal').onclick=()=>{
+   revisions.set(key,Number(data?.revision||0));
+   rememberRevisions();
+   conflicts.delete(key);
+   $('modal').close();
+   push();
+  };
+  $('keepCloud').onclick=()=>{
+   dirty.delete(key);
+   conflicts.delete(key);
+   revisions.set(key,Number(data?.revision||0));
+   applyStudyPayload(key,remote||{text:'',highlighted:false},state.notes,state.highlights);
+   lastSnapshot=currentPayloads();
+   cache();
+   refresh();
+   display();
+   $('modal').close();
+  };
+ }
+ function accountPanel(){if(!user)return authForm();modal('My account',accountMenu({email:user.email,status:saveState().detail,needsAttention:saveState().attention,saving:saveState().saving,avatar:$('accountButton').querySelector('img')?.getAttribute('src')||'',initial:$('accountButton').querySelector('.account-initial')?.textContent||'Y',conflicts:[...conflicts],esc}));const adminButton=$('adminPortal'),owner=user.id;adminButton.onclick=()=>location.assign('/admin/');revealAdminButton(adminButton,client,()=>user?.id===owner&&$('adminPortal')===adminButton);$('editProfile').onclick=()=>document.dispatchEvent(new CustomEvent('open-community',{detail:'profile'}));$('openFriends').onclick=()=>document.dispatchEvent(new CustomEvent('open-community',{detail:'friends'}));$('accountSignOut').onclick=signOut;$('retrySync').onclick=async()=>{$('modal').close();if(!ready){const {data}=await client.auth.getSession();user=null;loadCloud(data.session);}else{syncError='';await push();await preferenceSync?.flush();if(!dirty.size&&!preferenceSync?.pending){const {data}=await client.auth.getSession();loadCloud(data.session,true);}}};$('importDevice').onclick=()=>{if(!ready)return toast('Load your account before importing.');const keys=new Set([...Object.keys(device.notes),...Object.keys(device.highlights)]);if(!keys.size)return toast('No guest notes or highlights to copy.');let overlaps=[...keys].filter(k=>state.notes[k]&&device.notes[k]&&(state.notes[k].text!==device.notes[k].text||JSON.stringify(state.notes[k].tags||[])!==JSON.stringify(device.notes[k].tags||[])));if(overlaps.length&&!confirm(`Replace ${overlaps.length} conflicting account note(s) with guest notes? Export a backup first if you need both versions.`))return;for(const k of keys){if(device.notes[k])state.notes[k]=withExistingTags(device.notes[k],state.notes[k]);if(device.highlights[k]&&(device.highlights[k]!==true||!state.highlights[k]))state.highlights[k]=device.highlights[k];}mutate();refresh();$('modal').close();toast('Guest notes copied; syncing to your account.');};document.querySelectorAll('[data-conflict]').forEach(b=>b.onclick=()=>resolve(b.dataset.conflict));}
  $('accountButton').onclick=accountPanel;
  window.addEventListener('storage',event=>{
   if(event.key!==fenceKey||!sessionEnded()||locallyEnded)return;

@@ -1,3 +1,4 @@
+import {newHighlight} from './sync-model.js';
 export function setupPassageHighlights({state,save,renderChapter,canEdit,toast,getSelectedRange=()=>null,isSelected=number=>number===state.verse}){
  const root=document.getElementById('passageHighlights');let enabled=false,chapter='';
  const numbers=()=>state.data?.chapter.content.filter(v=>v.type==='verse').map(v=>v.number)||[];
@@ -10,7 +11,8 @@ export function setupPassageHighlights({state,save,renderChapter,canEdit,toast,g
   if(selected.length){
    const keys=selected.map(number=>`${state.book}.${state.chapter}.${number}`);
    if(keys.some(key=>!state.highlights[key])){
-    for(const key of keys)state.highlights[key]=true;
+    const highlight=newHighlight();
+    for(const key of keys)if(!state.highlights[key])state.highlights[key]=highlight;
     save('exegetical-highlights',state.highlights);
     renderChapter();
    }
@@ -25,5 +27,5 @@ export function setupPassageHighlights({state,save,renderChapter,canEdit,toast,g
  function decorateVerses(){
  document.querySelectorAll('[data-verse]').forEach(b=>{const number=Number(b.dataset.verse),highlighted=Boolean(state.highlights[`${state.book}.${state.chapter}.${number}`]);b.classList.toggle('highlighted',highlighted);b.setAttribute('aria-pressed',String(enabled?highlighted:isSelected(number)));b.setAttribute('aria-label',enabled?`${highlighted?'Remove highlight from':'Highlight'} verse ${number}`:`Study ${state.books.find(x=>x.id===state.book)?.name||state.book} ${state.chapter}:${number}`);});
  }
- return {decorate,decorateVerses,consume(number){if(!enabled)return false;if(!canEdit()){toast('Load your account before editing highlights.');return true;}if(!numbers().includes(number))return true;const key=`${state.book}.${state.chapter}.${number}`;if(state.highlights[key])delete state.highlights[key];else state.highlights[key]=true;save('exegetical-highlights',state.highlights);renderChapter();document.querySelector(`[data-verse="${number}"]`)?.focus({preventScroll:true});return true;}};
+ return {decorate,decorateVerses,consume(number){if(!enabled)return false;if(!canEdit()){toast('Load your account before editing highlights.');return true;}if(!numbers().includes(number))return true;const key=`${state.book}.${state.chapter}.${number}`;if(state.highlights[key])delete state.highlights[key];else state.highlights[key]=newHighlight();save('exegetical-highlights',state.highlights);renderChapter();document.querySelector(`[data-verse="${number}"]`)?.focus({preventScroll:true});return true;}};
 }

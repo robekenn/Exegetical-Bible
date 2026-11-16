@@ -5,12 +5,14 @@ import vm from 'node:vm';
 import {JSDOM} from 'jsdom';
 import {compareBibleReferences,testamentOf} from '../book-navigation.js';
 
+import * as syncModel from '../sync-model.js';
+
 const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
 const source=(await readFile(new URL('../app.js',import.meta.url),'utf8')).replace(/^import .*;\n/gm,'');
 async function reader(path,run){
  const dom=new JSDOM(html,{url:'https://example.test/'+path,runScripts:'outside-only'});
  const doc=dom.window.document,context=dom.getInternalVMContext();
- Object.assign(context,{compareBibleReferences,testamentOf});
+ Object.assign(context,{compareBibleReferences,testamentOf,...syncModel});
  const dialog=doc.getElementById('modal');
  dialog.showModal=()=>{dialog.open=true;};
  dialog.close=()=>{dialog.open=false;};
@@ -298,7 +300,7 @@ test('large multibyte notebooks export as independently importable parts',async(
    const input=doc.getElementById('importFile');
    const size=Buffer.byteLength(part);
    assert.ok(size<=5_000_000);
-   Object.defineProperty(input,'files',{value:[{size,text:async()=>part}]});
+   Object.defineProperty(input,'files',{configurable:true,value:[{size,text:async()=>part}]});
    await input.onchange({target:input});
   }
   assert.equal(evaluate('Object.keys(state.notes).length'),9);
@@ -339,5 +341,87 @@ test('Deuterocanonical study offers source chapter text and a matching commentar
   assert.equal(doc.getElementById('ancientText').querySelector('script'),null);
   await evaluate("renderCommentary(document.getElementById('studyBody'),'',studyId)");
   assert.equal(doc.querySelector('#studyBody a').href,'https://haydockcommentary.com/tobias-1');
+ });
+});
+
+test('account backdrop clicks preserve the active form and other dialogs can still dismiss',async()=>{
+ await reader('',async(evaluate,doc,win)=>{
+  const dialog=doc.getElementById('modal');
+  dialog.getBoundingClientRect=()=>({left:100,right:500,top:100,bottom:600});
+  const outside=()=>dialog.dispatchEvent(new win.MouseEvent('click',{clientX:50,clientY:50,bubbles:true}));
+  for(const mode of ['Sign in','Create your account']){
+   evaluate(`modal('${mode}','<div class="auth-flow"><form id="authForm"><input id="authPassword" type="password"></form></div>')`);
+   const password=doc.getElementById('authPassword');
+   password.value='fixture-password';
+   outside();
+   assert.equal(dialog.open,true);
+   assert.equal(password.value,'fixture-password');
+   doc.getElementById('closeModal').click();
+   dialog.dispatchEvent(new win.Event('close'));
+   assert.equal(dialog.open,false);
+   assert.equal(password.value,'');
+  }
+  evaluate("modal('Settings','<p>Reader settings</p>')");
+  outside();
+  assert.equal(dialog.open,false);
+ });
+});
+
+test('notebook scopes, searches, sorts and restores note and highlight tags',async()=>{
+ await reader('',async(evaluate,doc,win)=>{
+  win.TextEncoder=TextEncoder;
+  evaluate(`
+   state.books=[{id:'GEN',name:'Genesis'},{id:'JHN',name:'John'}];
+   state.book='JHN';state.chapter=1;
+   state.notes={
+    'JHN.1.1':{book:'JHN',bookName:'John',chapter:1,verse:1,text:'Local note',updatedAt:'2026-11-03'},
+    'JHN.2.1':{book:'JHN',bookName:'John',chapter:2,verse:1,text:'Same book',updatedAt:'2026-11-05'},
+    'GEN.1.1':{book:'GEN',bookName:'Genesis',chapter:1,verse:1,text:'Other book',updatedAt:'2026-11-01'}
+   };
+   state.highlights={'JHN.1.1':true,'JHN.1.2':true,'JHN.2.1':true};
+   api=async()=>({chapter:{content:[]},translation:{}});
+   notebook();
+  `);
+  const byId=id=>doc.getElementById(id);
+  const change=(id,value,type='change')=>{byId(id).value=value;byId(id).dispatchEvent(new win.Event(type));};
+  const notes=()=>[...doc.querySelectorAll('[data-note]')].map(button=>button.dataset.note);
+  const saveTags=(value)=>{
+   const form=doc.querySelector('[data-notebook-tags]');
+   form.elements.tags.value=value;
+   form.dispatchEvent(new win.Event('submit',{cancelable:true}));
+  };
+  assert.deepEqual(notes(),['JHN.1.1']);
+  saveTags('<Character of God>, <character of god>');
+  assert.equal(doc.querySelector('.notebook-tags li').textContent,'<Character of God>');
+  assert.equal(doc.querySelectorAll('.notebook-tags li').length,1);
+  change('notebookScope','book');
+  assert.deepEqual(notes(),['JHN.1.1','JHN.2.1']);
+  change('notebookTag','<character of god>');
+  assert.deepEqual(notes(),['JHN.1.1']);
+  change('notebookTag','');
+  change('notebookSort','recent');
+  assert.deepEqual(notes(),['JHN.1.1','JHN.2.1']);
+  change('notebookScope','all');
+  change('notebookSort','bible');
+  assert.deepEqual(notes(),['GEN.1.1','JHN.1.1','JHN.2.1']);
+  change('notebookScope','chapter');
+  change('noteSearch','Other book','input');
+  assert.deepEqual(notes(),['GEN.1.1']);
+  assert.match(byId('notebookScopeStatus').textContent,/Searching all books/);
+  change('noteSearch','','input');
+  assert.deepEqual(notes(),['JHN.1.1']);
+  doc.querySelector('[data-notebook-view="highlights"]').click();
+  assert.deepEqual([...doc.querySelectorAll('[data-highlight-card] h3')].map(h=>h.textContent),['John 1:1–2']);
+  saveTags('Encouragement');
+  assert.equal(doc.querySelector('.notebook-tags li').textContent,'Encouragement');
+  const part=evaluate("notebookBackupParts(state.notes,state.highlights,'2026-11-16')[0]");
+  evaluate('state.notes={};state.highlights={};notebook()');
+  const input=byId('importFile');
+  Object.defineProperty(input,'files',{value:[{size:Buffer.byteLength(part),text:async()=>part}]});
+  await input.onchange();
+  assert.equal(evaluate("state.notes['JHN.1.1'].tags[0]"),'<Character of God>');
+  assert.equal(evaluate("state.highlights['JHN.1.2'].tags[0]"),'Encouragement');
+  evaluate("state.chapter=2;notebook()");
+  assert.deepEqual([...doc.querySelectorAll('[data-highlight-card] h3')].map(h=>h.textContent),['John 2:1']);
  });
 });
