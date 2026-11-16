@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
 import {JSDOM} from 'jsdom';
+import {newHighlight} from '../sync-model.js';
 
 test('verse taps select contiguous passages and double taps study selections and saved highlights',async()=>{
  const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
  const dom=new JSDOM(html,{url:'https://example.test/',runScripts:'outside-only'});
  const {document}=dom.window,context=dom.getInternalVMContext();
+ Object.assign(context,{newHighlight});
  let code=await readFile(new URL('../app.js',import.meta.url),'utf8');
  code=code.replace(/^import .*;\n/gm,'');
  vm.runInContext(code.slice(0,code.lastIndexOf('start().catch')),context);
