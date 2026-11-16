@@ -12,6 +12,10 @@
  <header><a href="/">← Back to Bible</a><h1>Admin portal</h1></header>
  <p id="adminStatus" role="status">Checking your account…</p>
  <section id="adminContent" hidden>
+  <section class="admin-activity-summary" aria-label="Current activity">
+   <strong id="activeUserCount">—</strong>
+   <div>Active users <small>Signed-in accounts active in the last 5 minutes</small></div>
+  </section>
   <nav class="admin-tabs" aria-label="Admin views">
    <button type="button" data-admin-view="reports" aria-pressed="true">Inbox</button>
    <button type="button" data-admin-view="users" aria-pressed="false">Users</button>

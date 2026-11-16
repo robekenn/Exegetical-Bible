@@ -494,3 +494,8 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 .notebook-tag-editor summary{width:fit-content;cursor:pointer;color:var(--accent);padding:8px 0;font-weight:600}
 .notebook-tag-editor form{padding:12px 0 4px}
 .notebook-tag-editor input{font-size:16px}
+
+.activity-label{display:block;font-size:12px;color:var(--muted)}
+.activity-label[hidden]{display:none}
+.activity-label.is-active{color:var(--accent);font-weight:650}
+.activity-label.is-active::before{content:"";display:inline-block;width:7px;height:7px;margin-right:5px;border-radius:50%;background:currentColor;vertical-align:1px}
