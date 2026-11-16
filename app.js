@@ -1,3 +1,4 @@
+import {trackStudyActivity} from './activity.js';
 import {newHighlight,parseNotebookTags,validatePayload,validHighlightDetails,studyEntryCopyConflicts,withExistingTags} from './sync-model.js';
 import {setupBookSidebar,compareBibleReferences,testamentOf} from './book-navigation.js';
 import {setupForegroundScroll} from './foreground-scroll.js';
@@ -1544,7 +1545,8 @@ async function start(){
  applyPreferences:applyAccountPreferences
  });
  if(account.config.esvEnabled&&!state.translations.some(t=>t.id==='ESV'))state.translations.unshift({id:'ESV',name:'English Standard Version',englishName:'English Standard Version',shortName:'ESV',language:'eng',languageEnglishName:'English'});
- createCommunity({account,state,esc,modal,toast,currentPassage:()=>{const [verse,endVerse]=activeRange();return {book:state.book,chapter:state.chapter,verse,endVerse,translation:state.translation};},openVerse:async v=>{if(state.translations.some(t=>t.id===v.translation)){state.translation=v.translation;await getBooks();}if(state.books.some(b=>b.id===v.book))navigate(v.book,Math.min(Number(v.chapter),state.books.find(b=>b.id===v.book).numberOfChapters),Number(v.verse),Number(v.endVerse||v.verse));else toast('This book is not available in the selected translation.');}});
+ trackStudyActivity(account);
+ createCommunity({activityEnabled:true,account,state,esc,modal,toast,currentPassage:()=>{const [verse,endVerse]=activeRange();return {book:state.book,chapter:state.chapter,verse,endVerse,translation:state.translation};},openVerse:async v=>{if(state.translations.some(t=>t.id===v.translation)){state.translation=v.translation;await getBooks();}if(state.books.some(b=>b.id===v.book))navigate(v.book,Math.min(Number(v.chapter),state.books.find(b=>b.id===v.book).numberOfChapters),Number(v.verse),Number(v.endVerse||v.verse));else toast('This book is not available in the selected translation.');}});
  if(new URLSearchParams(location.search).get('invite')==='1'){
   const url=new URL(location.href);
   url.searchParams.delete('invite');

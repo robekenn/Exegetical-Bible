@@ -101,6 +101,14 @@ export function createAdminHandler(makeClient=createClient,env=process.env,makeM
     if(review.error)throw review.error;
     return res.status(200).json({ok:true});
    }
+   if(q.view==='activity'){
+    const ids=typeof q.ids==='string'&&q.ids?q.ids.split(','):[];
+    if((q.ids!==undefined&&typeof q.ids!=='string')||ids.length>25||ids.some(id=>!uuid.test(id)))
+     return res.status(400).json({error:'Invalid user IDs.'});
+    const result=await db.rpc('moderation_activity',{p_users:[...new Set(ids)]});
+    if(result.error)throw result.error;
+    return res.status(200).json(result.data);
+   }
    const page=Math.min(10000,Math.max(0,Number.parseInt(q.page,10)||0));
    if(['users','bans','audit'].includes(q.view)){
     const search=typeof q.search==='string'?q.search.trim().slice(0,120):'';

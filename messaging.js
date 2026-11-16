@@ -1,6 +1,6 @@
 import {verseLink} from './community-model.js';
 
-export function createMessaging({db,me,run,act,esc,modal,report,block,openFriends,openVerse,state,currentPassage}){
+export function createMessaging({db,me,run,act,esc,modal,report,block,openFriends,openVerse,state,currentPassage,activityBadge=()=>''}){
  const $=id=>document.getElementById(id);
  const drafts=new Map();
  let generation=0;
@@ -58,7 +58,7 @@ export function createMessaging({db,me,run,act,esc,modal,report,block,openFriend
    const signature=JSON.stringify([key(selected||{}),items]);
    if(inboxSignature===signature)return;
    inboxSignature=signature;
-   list.innerHTML=items.map((target,i)=>`<button type="button" class="message-inbox-row" data-chat-index="${i}" ${key(target)===key(selected||{})?'aria-current="true"':''}><span class="message-badge" aria-hidden="true">${target.group_id?'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v2"/></svg>':esc(title(target,names).slice(0,1).toUpperCase())}</span><span><strong>${esc(title(target,names))}</strong><small>${esc(target.preview||(target.group_id?'Group chat':'Direct message'))}</small></span></button>`).join('')||'<p class="muted">Add a friend to start a conversation.</p>';
+   list.innerHTML=items.map((target,i)=>`<button type="button" class="message-inbox-row" data-chat-index="${i}" ${key(target)===key(selected||{})?'aria-current="true"':''}><span class="message-badge" aria-hidden="true">${target.group_id?'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v2"/></svg>':esc(title(target,names).slice(0,1).toUpperCase())}</span><span><strong>${esc(title(target,names))}</strong>${!target.group_id&&friendIds.has(target.person)?activityBadge(target.person):''}<small>${esc(target.preview||(target.group_id?'Group chat':'Direct message'))}</small></span></button>`).join('')||'<p class="muted">Add a friend to start a conversation.</p>';
    list.querySelectorAll('[data-chat-index]').forEach(button=>button.onclick=()=>showThread(items[Number(button.dataset.chatIndex)]));
   }
 
@@ -127,7 +127,7 @@ export function createMessaging({db,me,run,act,esc,modal,report,block,openFriend
    const chatTitle=title(target,names);
    const pane=$('studyChatPane');
    pane.innerHTML=`<header class="message-pane-header">
-    <button type="button" class="message-back">← Inbox</button><div><h3>${esc(chatTitle)}</h3><p class="muted" id="messageParticipants">${target.group_id?'Group conversation':canSend?'Direct message':'Past conversation'}</p></div>
+    <button type="button" class="message-back">← Inbox</button><div><h3>${esc(chatTitle)}</h3>${!target.group_id&&friendIds.has(target.person)?activityBadge(target.person):''}<p class="muted" id="messageParticipants">${target.group_id?'Group conversation':canSend?'Direct message':'Past conversation'}</p></div>
     <details class="chat-options"><summary aria-label="Conversation options">•••</summary><div>${target.group_id?'<button type="button" id="leaveStudyGroup">Leave group</button>':'<button type="button" id="blockMessagePerson">Block person</button><button type="button" id="reportConversation">Report conversation</button>'}</div></details>
    </header>
    <div class="study-message-scroll" id="studyMessageScroll" aria-label="Conversation history"><button type="button" id="olderStudyMessages" hidden>Load older messages</button><div id="studyMessageRows"><p class="loading">Opening conversation…</p></div></div>

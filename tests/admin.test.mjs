@@ -46,3 +46,14 @@ test('appeal decision uses the verified actor and can retry mail without changin
  assert.equal(h.calls.filter(call=>call.name==='moderation_decide_appeal').length,1);
  assert.equal(h.calls.filter(call=>call.name==='moderation_finish_appeal_email').length,2);
 });
+
+test('activity count and user timestamps are available only through the existing admin gate',async()=>{
+ const denied=harness({user:report});
+ const query={view:'activity',ids:report};
+ assert.equal((await denied.run({query})).code,403);
+ assert.ok(denied.calls.every(call=>call.name==='moderation_is_admin'));
+ const allowed=harness({user:report,role:true});
+ assert.equal((await allowed.run({query:{...query,ids:'not-a-user'}})).code,400);
+ assert.equal((await allowed.run({query:{...query,ids:`${uid},${uid}`}})).code,200);
+ assert.deepEqual(allowed.calls.at(-1),{name:'moderation_activity',payload:{p_users:[uid]}});
+});

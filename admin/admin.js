@@ -1,3 +1,4 @@
+import {activityStatus} from '/activity.js';
 import {createBrowserClient,parseCookieHeader,serializeCookieHeader} from '/vendor/supabase.js';
 import {persistentCookieOptions} from '/session-options.js';
 
@@ -5,6 +6,7 @@ const $=id=>document.getElementById(id);
 const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const types={abuse:'User report',bug:'Bug report',feedback:'Feedback',appeal:'Ban appeal',privacy:'Privacy',support:'Support',accessibility:'Accessibility'};
 const reviewStatuses=['open','reviewing','resolved','dismissed'];
+let activityRequest=null;
 let client,sessionEnded=()=>false,view='reports',page=0,version=0,accountId=null,selectedBan='',search='';
 const status=message=>{$('adminStatus').textContent=message;};
 const timestamp=value=>esc(new Date(value).toLocaleString());
@@ -12,6 +14,8 @@ const timestamp=value=>esc(new Date(value).toLocaleString());
 function lock(message){
  version++;
  $('adminContent').hidden=true;
+ activityRequest=null;
+ $('activeUserCount').textContent='—';
  $('reportList').replaceChildren();
  $('reportDetail').replaceChildren();
  $('userFilter').reset();
@@ -35,6 +39,34 @@ async function request(query={},body){
  }
  return result;
 }
+async function refreshActivity(){
+ if($('adminContent').hidden||document.visibilityState!=='visible'||activityRequest)return;
+ const slots=[...document.querySelectorAll('[data-user-activity]')];
+ const ids=[...new Set(slots.map(slot=>slot.dataset.userActivity))].slice(0,25);
+ const pending=request({view:'activity',ids:ids.join(',')});
+ activityRequest=pending;
+ try{
+  const data=await pending;
+  if(activityRequest!==pending)return;
+  $('activeUserCount').textContent=data.activeCount;
+  const seen=new Map(data.rows.map(row=>[row.user_id,row.last_seen]));
+  const now=Date.parse(data.observedAt);
+  for(const slot of slots){
+   const result=activityStatus(seen.get(slot.dataset.userActivity),now);
+   slot.textContent=result?.label||'No activity recorded';
+   slot.classList.toggle('is-active',Boolean(result?.active));
+  }
+ }catch{
+  if(activityRequest===pending){
+   $('activeUserCount').textContent='—';
+   for(const slot of slots){slot.textContent='Activity unavailable';slot.classList.remove('is-active');}
+  }
+ }finally{
+  if(activityRequest===pending)activityRequest=null;
+ }
+}
+const activitySlot=id=>`<small class="activity-label" data-user-activity="${esc(id)}">Checking activity…</small>`;
+
 function showView(next,{ban='',user=''}={}){
  view=next;
  page=0;
@@ -50,6 +82,7 @@ function showView(next,{ban='',user=''}={}){
 
 async function list(){
  const requestVersion=++version;
+ activityRequest=null;
  status('Loading…');
  $('reportList').replaceChildren();
  $('reportDetail').replaceChildren();
@@ -71,7 +104,7 @@ async function list(){
    cards(data.reports,row=>types[row.category]||row.category,row=>row.status,row=>row.details.slice(0,130),row=>detail(row.id));
   }else if(view==='users'){
    cards(data.rows,row=>row.display_name||row.username||row.email||row.id,row=>row.role,row=>row.email,
-    row=>userDetail(row,data.owner,data.mailConfigured));
+    row=>userDetail(row,data.owner,data.mailConfigured),row=>activitySlot(row.id));
   }else if(view==='bans'){
    cards(data.rows,row=>row.email,row=>row.lifted_at?'Lifted':'Active',row=>'Email: '+row.email_status,
     row=>banDetail(row,data.mailConfigured));
@@ -82,15 +115,17 @@ async function list(){
     ${row.reason?`<p>${esc(row.reason)}</p>`:''}
    </article>`).join('')||'<p>No moderation actions yet.</p>';
   }
+  void refreshActivity();
  }catch(error){
   if(requestVersion===version)status(error.message);
  }
 }
 
-function cards(rows,title,subtitle,description,open){
+function cards(rows,title,subtitle,description,open,activity=()=>''){
  const root=$('reportList');
  root.innerHTML=rows.map((row,index)=>`<button class="report-card" type="button" data-item="${index}">
   <strong>${esc(title(row))} · ${esc(subtitle(row))}</strong>
+  ${activity(row)}
   <small>${timestamp(row.created_at)}</small><p>${esc(description(row))}</p>
  </button>`).join('')||'<p>No items in this view.</p>';
  root.querySelectorAll('[data-item]').forEach(button=>button.onclick=()=>{
@@ -188,6 +223,7 @@ function userDetail(user,owner,mailConfigured){
  const protectedAccount=user.role==='owner'||user.id===accountId;
  const roleAction=user.role==='admin'?'demote':'promote';
  $('reportDetail').innerHTML=`<h2>${esc(user.display_name||user.username||user.email||user.id)}</h2>
+  ${activitySlot(user.id)}
   <p>${esc(user.email)} · ${esc(user.role)}</p><p class="muted">${esc(user.id)}</p>
   ${owner&&!protectedAccount?`<button type="button" id="changeRole">${roleAction==='promote'?'Promote to admin':'Remove admin role'}</button>`:''}
   ${!protectedAccount&&user.role==='member'&&mailConfigured?`
@@ -216,7 +252,10 @@ function userDetail(user,owner,mailConfigured){
   await showView('bans');
   status(result.emailStatus==='sent'?'Account deleted. Ban notice sent.':'Account deleted. Check the Bans view to retry the notice.');
  });
+ activityRequest=null;
+ void refreshActivity();
 }
+
 function banDetail(ban,mailConfigured){
  const requestVersion=++version;
  $('reportDetail').innerHTML=`<h2>${esc(ban.email)}</h2>
@@ -277,4 +316,6 @@ try{
   else accountId=session.user.id;
  });
  await list();
+ window.setInterval(refreshActivity,60_000);
+ document.addEventListener('visibilitychange',refreshActivity);
 }catch(error){status(error.message);}
