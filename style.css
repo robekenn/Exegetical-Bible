@@ -562,26 +562,28 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 .compare-reference-form button{font-size:13px;min-height:44px}
 @media(max-width:760px){.chapter-heading h1{font-size:34px}.chapter-heading{gap:14px;padding-bottom:20px}.reading-content{padding-top:26px}.commentary-text{font-size:18px}#commentarySelect{font-size:16px}.study-body .study-tool-intro h3{font-size:23px}}
 
-/* Keep the three desktop destinations together, with equal targets and clear selection. */
+/* An editorial navigation row that follows the reader's serif typography. */
 @media(min-width:761px){
- .reader-topbar{gap:24px}
- .reader-topbar>.main-navigation{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;height:auto;width:390px;flex-shrink:0;padding:5px;border:1px solid var(--line);border-radius:13px;background:var(--bg)}
- .main-navigation button{display:flex;align-items:center;justify-content:center;gap:8px;min-width:0;height:44px;padding:10px 8px;border-radius:9px;color:var(--muted);font-size:13px;font-weight:600;line-height:1.3;white-space:nowrap}
- .main-navigation button svg{width:18px;height:18px;flex:0 0 18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
- .main-navigation button:hover{background:var(--soft);color:var(--ink)}
- .main-navigation .nav-active,.main-navigation .nav-active:hover{background:var(--accent);color:var(--paper)}
- .main-navigation .nav-active:after{content:none}
+ .reader-topbar{gap:36px}
+ .reader-topbar>.main-navigation{display:flex;align-items:center;gap:32px;height:auto;padding:0;flex-shrink:0}
+ .main-navigation button{position:relative;display:flex;align-items:center;justify-content:center;min-height:48px;height:auto;padding:10px 2px;border-radius:3px;background:transparent;color:var(--muted);font:400 18px/1.4 var(--serif);white-space:nowrap}
+ .main-navigation button+button:before{content:'';position:absolute;inset-inline-start:-16px;top:calc(50% - 8px);width:1px;height:16px;background:var(--line)}
+ .main-navigation button:hover{background:transparent;color:var(--accent)}
+ .main-navigation .nav-active{color:var(--ink);font-weight:600}
+ .main-navigation .nav-active:after{content:'';position:absolute;bottom:2px;left:calc(50% - 12px);right:auto;width:24px;height:2px;border-radius:2px;background:var(--gold)}
  .reader-topbar .top-actions{margin-left:0;flex-shrink:0}
 }
 @media(min-width:761px) and (max-width:1100px){
- .reader-topbar{gap:14px;padding-inline:18px}
- .reader-topbar>.main-navigation{width:310px}
- .main-navigation button{font-size:12px;gap:6px;padding-inline:6px}
+ .reader-topbar{gap:20px;padding-inline:18px}
+ .reader-topbar>.main-navigation{gap:24px}
+ .main-navigation button{font-size:16px}
+ .main-navigation button+button:before{inset-inline-start:-12px}
 }
 @media(min-width:761px) and (max-width:900px){
- .reader-topbar{gap:12px;padding-inline:14px}
+ .reader-topbar{gap:14px;padding-inline:14px}
  .reader-topbar .brand{font-size:22px;gap:7px}
  .reader-topbar .logo{font-size:38px}
- .reader-topbar>.main-navigation{width:270px}
- .main-navigation button svg{display:none}
+ .reader-topbar>.main-navigation{gap:20px}
+ .main-navigation button{font-size:15px}
+ .main-navigation button+button:before{inset-inline-start:-10px}
 }
