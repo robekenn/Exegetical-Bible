@@ -664,7 +664,7 @@ function renderNotes(quote){
  editor.disabled=!canEdit();
  function saveNote(){
   const ok=save('exegetical-notes',state.notes);
-  noteCount();
+
   renderChapter();
   return ok;
  }
@@ -740,7 +740,6 @@ function renderNotes(quote){
   }
  };
 }
-function noteCount(){$('noteCount').textContent=Object.keys(state.notes).length;}
 $('bookFilter').oninput=renderBooks;
 document.querySelectorAll('[data-testament]').forEach(b=>b.onclick=()=>{state.testament=b.dataset.testament;document.querySelectorAll('[data-testament]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});bookNavigation?.setTestament();});
 $('bookSelect').onchange=e=>navigate(e.target.value,1);
@@ -1237,7 +1236,7 @@ function highlightNoteForm(card,passage,refreshNotes){
   if(!text.value.trim()){message.textContent='Enter a note before saving.';return;}
   state.notes[key]={...(state.notes[key]?.tags?{tags:state.notes[key].tags}:{}),text:text.value,book:passage.book,bookName:passage.name,chapter:passage.chapter,verse:passage.first,...(passage.last>passage.first?{endVerse:passage.last}:{}),updatedAt:new Date().toISOString()};
   const saved=save('exegetical-notes',state.notes);
-  noteCount();
+
   renderChapter();
   if(state.tab==='notes'&&key===activeNoteKey())renderStudy();
   refreshNotes();
@@ -1520,7 +1519,7 @@ function notebook(){
    Object.assign(state.highlights,highlights);
    const notesSaved=save('exegetical-notes',state.notes);
    const highlightsSaved=save('exegetical-highlights',state.highlights);
-   noteCount();
+
    renderChapter();
    renderStudy();
    refreshList();
@@ -1540,7 +1539,7 @@ document.addEventListener('study-auth-changed',()=>{
 });
 $('notebookNav').onclick=notebook;$('readNav').onclick=()=>{$('reader').scrollIntoView({behavior:'smooth'});};
 $('sources').onclick=()=>modal('Rooted in good sources',`<div class="modal-copy"><p><b>Bible translations and commentaries</b><br>Provided by the <a href="https://bible.helloao.org" target="_blank" rel="noopener noreferrer">Free Use Bible API, AO Lab</a>. Each translation and commentary retains its own source and license, linked within the reader. Availability and versification vary.</p><p><b>API.Bible translations</b><br>Additional editions are supplied through <a href="https://api.bible/" target="_blank" rel="noopener noreferrer">API.Bible</a> according to this site’s licensed access. Copyright notices accompany the text. Its required FUMS service reports Scripture views using anonymous device/session identifiers. See the <a href="/privacy/">privacy notice</a>.</p><p><b>Original languages</b><br>The Berean Bible interlinear is public domain. Brief Hebrew and Greek lexicons are from <a href="https://github.com/STEPBible/STEPBible-Data" target="_blank" rel="noopener noreferrer">STEPBible.org / Tyndale House, Cambridge</a>, under <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a>, adapted into the API format by AO Lab.</p><p>A dictionary gives a word’s range of meaning. Context determines how it is used in a particular passage. Historical commentaries reflect their authors’ perspectives.</p><p><b>ESV copyright</b><br>Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved. The ESV text may not be quoted in any publication made available to the public by a Creative Commons license. The ESV may not be translated into any other language. Users may not copy or download more than 500 verses of the ESV Bible or more than one half of any book of the ESV Bible. <a href="https://www.esv.org/" target="_blank" rel="noopener noreferrer">ESV.org</a></p><p><b>Your notes</b><br>Sign in to save private notes, highlights, reading position, translation, and appearance to your account using Supabase. Database rules restrict records to their owner. Guest notes stay in this browser until you choose to copy them into an account. Account notes are cached separately by user on this device; sign out on shared devices. Export a backup at any time.</p><p><a href="https://github.com/robekenn/Exegetical-Bible" target="_blank" rel="noopener noreferrer">View the project on GitHub ↗</a></p></div>`);
-async function init(){noteCount();try{const [translations,commentaries,features,apiBibles]=await Promise.all([api('available_translations.json'),api('available_commentaries.json'),fetch('/api/config').then(r=>r.json()),api('available_api_bible.json').catch(e=>{apiBibleError=e.message;return {translations:[]};})]);translations.translations=[...translations.translations,...apiBibles.translations];if(features.esvEnabled)translations.translations.unshift({id:'ESV',name:'English Standard Version',englishName:'English Standard Version',shortName:'ESV',language:'eng',languageEnglishName:'English'});state.translations=translations.translations.sort((a,b)=>(a.language==='eng'?0:1)-(b.language==='eng'?0:1)||(a.englishName||a.name).localeCompare(b.englishName||b.name));state.commentaries=commentaries.commentaries;if(!state.translations.some(t=>t.id===state.translation))state.translation='BSB';await getBooks();await loadChapter(linkedRange,null,false,Boolean(linkedRange));}catch(e){showError($('chapterText'),e,init);}}
+async function init(){try{const [translations,commentaries,features,apiBibles]=await Promise.all([api('available_translations.json'),api('available_commentaries.json'),fetch('/api/config').then(r=>r.json()),api('available_api_bible.json').catch(e=>{apiBibleError=e.message;return {translations:[]};})]);translations.translations=[...translations.translations,...apiBibles.translations];if(features.esvEnabled)translations.translations.unshift({id:'ESV',name:'English Standard Version',englishName:'English Standard Version',shortName:'ESV',language:'eng',languageEnglishName:'English'});state.translations=translations.translations.sort((a,b)=>(a.language==='eng'?0:1)-(b.language==='eng'?0:1)||(a.englishName||a.name).localeCompare(b.englishName||b.name));state.commentaries=commentaries.commentaries;if(!state.translations.some(t=>t.id===state.translation))state.translation='BSB';await getBooks();await loadChapter(linkedRange,null,false,Boolean(linkedRange));}catch(e){showError($('chapterText'),e,init);}}
 let bookNavigation;
 let streak,highlightTools;
 async function applyAccountPreferences(p){
@@ -1581,7 +1580,7 @@ async function start(){
  setupDesktopPanels();
  await init();
  startupLinkRevision=loadId;
- account=await createAccount({state,esc,modal,toast,refresh:(options={})=>{noteCount();if(options.background){const starts=noteStarts();document.querySelectorAll('[data-verse]').forEach(el=>{const k=state.book+'.'+state.chapter+'.'+el.dataset.verse;el.classList.toggle('highlighted',Boolean(state.highlights[k]));let dot=el.querySelector('.note-dot');if(starts.has(k)&&!dot){dot=document.createElement('span');dot.className='note-dot';dot.textContent='✎';dot.setAttribute('aria-label','Has note');el.append(dot);}else if(!starts.has(k)&&dot)dot.remove();});const editor=$('noteText');if(editor&&document.activeElement!==editor)editor.value=state.notes[editor.dataset.noteKey]?.text||'';return;}renderChapter();renderStudy();},
+ account=await createAccount({state,esc,modal,toast,refresh:(options={})=>{if(options.background){const starts=noteStarts();document.querySelectorAll('[data-verse]').forEach(el=>{const k=state.book+'.'+state.chapter+'.'+el.dataset.verse;el.classList.toggle('highlighted',Boolean(state.highlights[k]));let dot=el.querySelector('.note-dot');if(starts.has(k)&&!dot){dot=document.createElement('span');dot.className='note-dot';dot.textContent='✎';dot.setAttribute('aria-label','Has note');el.append(dot);}else if(!starts.has(k)&&dot)dot.remove();});const editor=$('noteText');if(editor&&document.activeElement!==editor)editor.value=state.notes[editor.dataset.noteKey]?.text||'';return;}renderChapter();renderStudy();},
  localRead:stored,localWrite:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true;}catch{return false;}},
  applyFavorites:setFavorites,
  exportBackup:exportNotes,
