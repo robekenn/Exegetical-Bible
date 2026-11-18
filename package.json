@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "npm run build:local && node --env-file-if-exists=.env.local dev.mjs",
-    "check": "node --check app.js && node --check account.js && node --check community.js && node --check api/account.js && node --check lib/esv.js && node --check api/bible.js && node --test tests/*.test.mjs",
+    "check": "node --check plans.js && node --check plan-store.js && node --check plan-catalog.js && node --check app.js && node --check account.js && node --check community.js && node --check api/account.js && node --check lib/esv.js && node --check api/bible.js && node --test tests/*.test.mjs",
     "build": "node scripts/build.mjs",
     "build:local": "node scripts/build.mjs",
     "db:migrate": "node scripts/migrate.mjs"

@@ -114,6 +114,7 @@ export async function createAccount({state,esc,modal,toast,refresh,applyPreferen
  function endSession(revoke=false){
   const owner=user?.id,token=sessionToken;
   if(!owner||locallyEnded)return;
+  if(!document.dispatchEvent(new CustomEvent('study-before-signout',{cancelable:true})))return;
   locallyEnded=true;
   const options=persistentCookieOptions({maxAge:0},location.protocol==='https:');
   for(const {name}of parseCookieHeader(document.cookie)){
