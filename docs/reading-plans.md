@@ -18,7 +18,7 @@ Account deletion removes the user's enrollments, progress, responses and replies
 
 ## Verification and deployment
 
-Run `npm run check` and `npm run build`. Apply the additive migration before deploying. `npm run db:migrate` also provisions the foundation if it is absent, using the existing configured database connection.
+Run `npm run check` and `npm run build`. Apply the foundation and lookup-index migrations before deploying. `npm run db:migrate` also provisions the foundation if it is absent, using the existing configured database connection.
 
 `tests/plans.test.mjs` covers storage, identity boundaries, retries, conflict choices, explicit import and the catalog/session/reader flow. `tests/sql/reading-plans.sql` uses disposable fixtures in a rolled-back transaction to verify real PostgreSQL RLS, version immutability, release rules and optimistic writes. Run it against an isolated database or a controlled transaction after applying the migration. No fixture should survive.
 
