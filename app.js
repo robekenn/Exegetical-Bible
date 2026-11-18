@@ -327,6 +327,11 @@ async function renderDeuterocanonicalLanguage(root,quote,id){
  select.onchange=load;
  await load();
 }
+// Keep the source's paragraph boundaries; provider text is always rendered as text.
+function commentaryParagraphs(content){
+ return flatten(content).split(/\r?\n+/).map(text=>text.trim()).filter(Boolean)
+  .map(text=>`<p>${esc(text)}</p>`).join('');
+}
 async function renderCommentary(root,quote,id){
  if(deuterocanonicalPassage()){
   const link=haydockReference();
@@ -337,7 +342,7 @@ async function renderCommentary(root,quote,id){
  }
  const selected=state.commentary,chapter=state.chapter,bookId=state.book;
  const restoreFocus=document.activeElement?.id==='commentarySelect';
- root.innerHTML=`<label class="label" for="commentarySelect">COMMENTARY LIBRARY</label><select id="commentarySelect" aria-describedby="commentaryHelp">${state.commentaries.map(c=>`<option value="${esc(c.id)}" ${c.id===selected?'selected':''}>${esc(c.name)}</option>`).join('')}</select><p id="commentaryHelp" class="muted">You can switch commentaries at any time. Coverage varies by author.</p>${quote}<div id="commentaryContent" aria-busy="true"><p class="loading" role="status">Opening commentary…</p></div>`;
+ root.innerHTML=`<label class="label" for="commentarySelect">Commentary</label><select id="commentarySelect" aria-describedby="commentaryHelp">${state.commentaries.map(c=>`<option value="${esc(c.id)}" ${c.id===selected?'selected':''}>${esc(c.name)}</option>`).join('')}</select><p id="commentaryHelp" class="muted">Choose an author to explore this passage. Coverage varies by work.</p>${quote}<div id="commentaryContent" aria-busy="true"><p class="loading" role="status">Opening commentary…</p></div>`;
  if(restoreFocus)$('commentarySelect').focus({preventScroll:true});
  $('commentarySelect').onchange=e=>{state.commentary=e.target.value;renderStudy();};
  const content=$('commentaryContent');
@@ -348,8 +353,12 @@ async function renderCommentary(root,quote,id){
   const entries=d.chapter.content.filter(v=>v.type==='verse');
   const [first,last]=activeRange();
   const sections=entries.filter((entry,index)=>entry.number<=last&&(entries[index+1]?.number??Infinity)>first);
-  const body=sections.map(entry=>`<div class="source-label">SECTION STARTING AT VERSE ${entry.number}</div><div class="commentary-text">${esc(flatten(entry.content))}</div>`).join('');
-  content.innerHTML=`<div class="source-label">${esc(d.commentary.name)}</div><h3>Understanding the passage</h3>${body||'<p>No commentary is available for this passage in this work.</p>'}<p class="attribution">Historical commentary reflects its author’s interpretation. Section-based notes may discuss several verses. <a target="_blank" rel="noopener noreferrer" href="${safeURL(d.commentary.licenseUrl)}">Source license ↗</a></p>`;
+  const body=sections.map(entry=>{
+   const index=entries.indexOf(entry),end=(entries[index+1]?.number??(verses().at(-1)?.number+1))-1;
+   const label=end>entry.number?`Verses ${entry.number}–${end}`:`Verse ${entry.number}`;
+   return `<section class="commentary-section"><h4>${esc(label)}</h4><div class="commentary-text">${commentaryParagraphs(entry.content)}</div></section>`;
+  }).join('');
+  content.innerHTML=`<div class="source-label">${esc(d.commentary.name)}</div><h3>Commentary on the passage</h3>${body||'<p>No commentary is available for this passage in this work.</p>'}<p class="attribution">Historical commentary reflects its author’s interpretation. Section-based notes may discuss several verses. <a target="_blank" rel="noopener noreferrer" href="${safeURL(d.commentary.licenseUrl)}">Source license ↗</a></p>`;
  }catch(error){
   if(id!==studyId)return;
   if(error.status===404){content.innerHTML=`<div class="commentary-unavailable" role="status"><h3>No coverage for this chapter</h3><p>${esc(state.commentaries.find(c=>c.id===selected)?.name||'This commentary')} does not cover ${esc(book()?.name||bookId)} ${chapter} in the available source.</p><p>Choose another commentary above to keep studying.</p><button id="chooseAnotherCommentary">Choose another commentary ↑</button></div>`;$('chooseAnotherCommentary').onclick=()=>$('commentarySelect').focus();}
@@ -536,7 +545,7 @@ else if(state.tab==='language'){const d=await api(`d/bsb-interlinear/${state.boo
 else if(state.tab==='notes'){renderNotes(quote);}
 else if(state.tab==='related'){await renderRelated(root,quote,passage,id);}
 else if(state.tab==='compare'){
- const card=(label,text,dir='ltr')=>`<article class="translation-compare-card"><small>${esc(label)}</small><div dir="${dir==='rtl'?'rtl':'ltr'}">${esc(text)}</div></article>`;
+ const card=(label,text,dir='ltr',role='Comparison translation')=>`<article class="translation-compare-card"><span class="compare-card-role">${esc(role)}</span><small>${esc(label)}</small><div dir="${dir==='rtl'?'rtl':'ltr'}">${esc(text)}</div></article>`;
  const primary=state.data.translation;
  const credit=(edition,fallback)=>{
   const url=edition.licenseUrl||edition.website;
@@ -544,15 +553,18 @@ else if(state.tab==='compare'){
   if(!url&&!notice)return '';
   return `<p class="attribution"><strong>${esc(edition.shortName||edition.name||fallback)}</strong>${url?` · <a href="${safeURL(url)}" target="_blank" rel="noopener noreferrer">Source &amp; license ↗</a>`:''}${notice?'<br>'+esc(flatten(notice)):''}</p>`;
  };
- root.innerHTML=`<div class="compare-navigation"><button id="comparePrevious" aria-label="Previous verse">←</button><strong>${esc(passageLabel())}</strong><button id="compareNext" aria-label="Next verse">→</button></div>
-  <div class="compare-translation-controls"><span>Compare with</span><button type="button" id="compareTranslationButton" class="version-pill"></button></div>
-  <form id="compareReferenceForm" class="compare-reference-form">
-   <label class="label" for="compareReference">Comparison reference in ${esc(book()?.name||state.book)}</label>
-   <div class="button-row"><input id="compareReference" maxlength="15" placeholder="Chapter:verse or range"><button type="submit">Apply</button><button type="button" id="resetCompareReference">Reset</button></div>
-   <p id="compareReferenceStatus" class="muted" role="status"></p>
-  </form>
-  <div class="comparison-pair">${card(`${compareEditionLabel(state.translation,primary.shortName||state.translation)} · ${book()?.name||state.book} ${state.chapter}:${comparisonVerseLabel(passage)}`,passageText(passage),primary.textDirection)}<div id="comparison" aria-live="polite"></div></div>
-  <footer class="comparison-credits" aria-label="Translation sources">${credit(primary,state.translation)}<div id="comparisonCredit"></div></footer>`;
+ root.innerHTML=`<div class="study-tool-intro compare-intro"><h3>Read another translation</h3><p class="muted">See how the selected passage is worded in a different edition.</p></div>
+  <div class="compare-navigation"><button id="comparePrevious" aria-label="Previous verse">←</button><strong>${esc(passageLabel())}</strong><button id="compareNext" aria-label="Next verse">→</button></div>
+  <div class="compare-translation-controls"><label for="compareTranslationButton">Compare with</label><button type="button" id="compareTranslationButton" class="version-pill" aria-haspopup="dialog"></button></div>
+  <div class="comparison-pair">${card(`${compareEditionLabel(state.translation,primary.shortName||state.translation)} · ${book()?.name||state.book} ${state.chapter}:${comparisonVerseLabel(passage)}`,passageText(passage),primary.textDirection,'Reading translation')}<div id="comparison" aria-live="polite"></div></div>
+  <footer class="comparison-credits" aria-label="Translation sources">${credit(primary,state.translation)}<div id="comparisonCredit"></div></footer>
+  <p id="compareReferenceStatus" class="compare-alignment muted" role="status"></p>
+  <details class="compare-reference-options"><summary>Adjust comparison reference</summary><p class="muted">Some editions number verses differently. Use a chapter and verse or range to line up the text.</p>
+   <form id="compareReferenceForm" class="compare-reference-form">
+    <label class="label" for="compareReference">Reference in ${esc(book()?.name||state.book)}</label>
+    <div class="button-row"><input id="compareReference" maxlength="15" placeholder="Chapter:verse or range" aria-describedby="compareReferenceStatus"><button type="submit">Apply</button><button type="button" id="resetCompareReference">Reset</button></div>
+   </form>
+  </details>`;
  const compareButton=$('compareTranslationButton');
  function updateCompareLabel(){
   const edition=state.translations.find(t=>t.id===state.compare);
@@ -634,15 +646,19 @@ function renderNotes(quote){
  const [first,last]=activeRange(),range=first!==last;
  const passage=verses().filter(v=>inRange(v.number));
  const allHighlighted=passage.every(v=>highlightedVerse(v.number));
- root.innerHTML=`<div class="study-tool-intro"><h3>Your thoughts on the Word.</h3><p class="muted">Private notes for ${esc(passageLabel())}. Saved as you type.</p></div>
+ root.innerHTML=`<div class="study-tool-intro note-intro"><h3>Make it your own</h3><p class="muted">Your private note on ${esc(passageLabel())}.</p></div>
  <details class="note-passage"><summary>Read the selected passage</summary>${quote}</details>
- <div class="note-prompts"><button type="button" data-note-prompt="Observation">Observe</button><button type="button" data-note-prompt="Interpretation">Understand</button><button type="button" data-note-prompt="Application">Apply</button></div>
- <label for="noteText" class="label">Observation, interpretation, application, or a question to revisit.</label>
- <textarea id="noteText" data-note-key="${esc(k)}" maxlength="200000" class="study-note-editor" placeholder="What stands out? What does it mean? How will you respond?">${esc(state.notes[k]?.text||'')}</textarea>
- <p class="save-status" id="saveStatus">${esc(account?.status()||'Saved on this device.')}</p>
- <div class="button-row"><button id="highlightVerse">${allHighlighted?'Remove highlight':range?'Highlight verses':'Highlight verse'}</button><button id="copyVerse">Copy ${range?'passage':'verse'}</button><button id="sendVerseToFriend">Send to friend</button></div>
- <details class="note-more"><summary>More note options</summary><button id="deleteNote" class="danger">Delete this note</button></details>
- <p class="muted">${account?.isUser()?'Private to your account. Notes and highlights sync across devices.':'Guest notes stay in this browser. Sign in to save them to an account.'} Export a backup from My notebook.</p>`;
+ <div class="note-editor-heading"><label for="noteText">Your note</label><span class="save-status" id="saveStatus" role="status">${esc(account?.status()||'Saved on this device.')}</span></div>
+ <textarea id="noteText" data-note-key="${esc(k)}" maxlength="200000" class="study-note-editor" placeholder="What stands out to you?">${esc(state.notes[k]?.text||'')}</textarea>
+ <details class="note-writing-help"><summary>Need a starting point?</summary><p class="muted">Add a prompt to your note, then make space to reflect.</p><div class="note-prompts"><button type="button" data-note-prompt="Observation">Observe</button><button type="button" data-note-prompt="Interpretation">Understand</button><button type="button" data-note-prompt="Application">Apply</button></div></details>
+ <section class="study-note-tags" aria-labelledby="noteTagsHeading"><h4 id="noteTagsHeading">Organize this note</h4><p class="muted" id="noteTagsHelp">Add tags to find this passage in My notebook. Separate tags with commas.</p>
+  <div id="studyNoteTagList"></div>
+  <form id="studyNoteTagForm"><label class="label" for="studyNoteTags">Tags</label><div class="note-tag-input"><input id="studyNoteTags" maxlength="500" placeholder="e.g. Prayer, Questions" aria-describedby="noteTagsHelp noteTagStatus"><button type="submit">Save tags</button></div></form>
+  <p id="noteTagStatus" class="muted" role="status"></p>
+ </section>
+ <div class="button-row note-passage-actions"><button id="highlightVerse">${allHighlighted?'Remove highlight':range?'Highlight verses':'Highlight verse'}</button><button id="copyVerse">Copy ${range?'passage':'verse'}</button><button id="sendVerseToFriend">Send to friend</button></div>
+ <details class="note-more"><summary>More note options</summary><button id="deleteNote" class="danger">Delete this note</button><p class="muted">Export a backup from My notebook.</p></details>
+ <p class="muted note-privacy">${account?.isUser()?'Private to your account. Notes and highlights sync across devices.':'Guest notes stay in this browser. Sign in to save them to an account.'}</p>`;
  const editor=$('noteText');
  const canEdit=()=>!account||account.canEdit();
  editor.disabled=!canEdit();
@@ -652,6 +668,34 @@ function renderNotes(quote){
   renderChapter();
   return ok;
  }
+ const tagInput=$('studyNoteTags'),tagStatus=$('noteTagStatus');
+ function renderTags(){
+  const tags=state.notes[k]?.tags||[];
+  tagInput.value=tags.join(', ');
+  $('studyNoteTagList').innerHTML=tags.length?`<ul class="notebook-tags" aria-label="Note tags">${tags.map((tag,index)=>`<li>${esc(tag)}<button type="button" data-remove-note-tag="${index}" aria-label="Remove tag ${esc(tag)}">×</button></li>`).join('')}</ul>`:'';
+  $('studyNoteTagList').querySelectorAll('[data-remove-note-tag]').forEach(button=>button.onclick=()=>{
+   if(!canEdit()||!state.notes[k])return;
+   const remaining=state.notes[k].tags.filter((_,index)=>index!==Number(button.dataset.removeNoteTag));
+   storeTags(remaining);
+   tagInput.focus({preventScroll:true});
+  });
+ }
+ function storeTags(tags){
+  state.notes[k]={...state.notes[k],tags,updatedAt:new Date().toISOString()};
+  const ok=saveNote();
+  tagStatus.textContent=ok?'Tags saved.':'Could not save tags. Export a backup before leaving.';
+  renderTags();
+ }
+ $('studyNoteTagForm').onsubmit=event=>{
+  event.preventDefault();
+  if(!canEdit())return;
+  if(!state.notes[k]){tagStatus.textContent='Write a note first, then save its tags.';editor.focus();return;}
+  try{storeTags(parseNotebookTags(tagInput.value));}
+  catch(error){tagStatus.textContent=error.message;}
+ };
+ tagInput.disabled=!canEdit();
+ $('studyNoteTagForm').querySelector('button').disabled=!canEdit();
+ renderTags();
  root.querySelectorAll('[data-note-prompt]').forEach(button=>button.onclick=()=>{
   if(!canEdit())return;
   const addition=(editor.value.trim()?'\n\n':'')+button.dataset.notePrompt+':\n';
@@ -665,7 +709,7 @@ function renderNotes(quote){
   if(!canEdit())return;
   const text=editor.value;
   if(text.trim())state.notes[k]={...(state.notes[k]?.tags?{tags:state.notes[k].tags}:{}),text,book:state.book,bookName:book().name,chapter:state.chapter,verse:first,...(range?{endVerse:last}:{}),updatedAt:new Date().toISOString()};
-  else delete state.notes[k];
+  else{delete state.notes[k];renderTags();}
   $('saveStatus').textContent=saveNote()?(account?.status()||'Saved on this device.'):'Could not save. Export a backup before leaving.';
  };
  $('highlightVerse').onclick=()=>{
