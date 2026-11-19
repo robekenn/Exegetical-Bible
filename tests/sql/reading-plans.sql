@@ -4,6 +4,7 @@ insert into auth.users(id,email) values
  ('00000000-0000-4000-8000-000000000131','plans-first@example.test'),
  ('00000000-0000-4000-8000-000000000132','plans-second@example.test'),
  ('00000000-0000-4000-8000-000000000133','plans-third@example.test');
+insert into beta_private.testers(user_id) values ('00000000-0000-4000-8000-000000000131'),('00000000-0000-4000-8000-000000000132'),('00000000-0000-4000-8000-000000000133');
 insert into public.reading_plan_studies(id,author_id) values('private-draft','00000000-0000-4000-8000-000000000131');
 insert into public.reading_plan_versions(id,study_id,version,content,session_count) values('private-draft-v1','private-draft',1,'{}',1),('mark-draft-v2','mark',2,'{}',1);
 insert into public.reading_plan_runs(id,version_id,owner_id,mode,starts_at,timezone) values
@@ -22,7 +23,7 @@ insert into public.reading_plan_responses(run_id,version_id,user_id,session_numb
  ('00000000-0000-4000-8000-000000000143','mark-v1','00000000-0000-4000-8000-000000000131',2,'Unreleased community response');
 set local role anon;
 do $$begin
- if (select count(*) from public.reading_plan_versions)<>3 then raise exception 'Draft version leaked publicly'; end if;
+ if (select count(*) from public.reading_plan_versions)<>0 then raise exception 'Beta version leaked publicly'; end if;
  begin perform public.start_personal_reading_plan('mark-v1');raise exception 'Anonymous run creation allowed';exception when insufficient_privilege then null;end;
 end;$$;
 reset role;

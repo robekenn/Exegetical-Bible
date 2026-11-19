@@ -226,7 +226,8 @@ function userDetail(user,owner,mailConfigured){
   ${activitySlot(user.id)}
   <p>${esc(user.email)} · ${esc(user.role)}</p><p class="muted">${esc(user.id)}</p>
   ${owner&&!protectedAccount?`<button type="button" id="changeRole">${roleAction==='promote'?'Promote to admin':'Remove admin role'}</button>`:''}
-  ${!protectedAccount&&user.role==='member'&&mailConfigured?`
+  ${!['admin','owner'].includes(user.role)?`<button type="button" id="changeBeta">${user.role==='beta tester'?'Remove beta tester role':'Make beta tester'}</button><p class="muted">Beta testers can preview development features. They do not receive admin access.</p>`:''}
+  ${!protectedAccount&&['member','beta tester'].includes(user.role)&&mailConfigured?`
    <form id="banUserForm">
     <h3>Ban and delete account</h3>
     <p>This permanently deletes the account and blocks its email. The reason below will be emailed with an appeal link.</p>
@@ -236,6 +237,11 @@ function userDetail(user,owner,mailConfigured){
     <input id="banConfirmation" required pattern="BAN" autocomplete="off">
     <button type="submit" class="danger">Ban and delete</button>
    </form>`:''}`;
+ if($('changeBeta'))$('changeBeta').onclick=async event=>{
+  event.currentTarget.disabled=true;
+  try{await request({}, {action:'set_beta',target:user.id,enabled:user.role!=='beta tester'});if(requestVersion===version){await list();status('Beta tester access updated.');}}
+  catch(error){if(requestVersion===version){status(error.message);$('changeBeta').disabled=false;}}
+ };
  if($('changeRole'))$('changeRole').onclick=async event=>{
   if(!confirm(roleAction==='promote'?'Give this user access to private reports and moderation tools?':'Remove this user’s admin access?'))return;
   event.currentTarget.disabled=true;

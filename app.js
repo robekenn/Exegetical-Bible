@@ -1,3 +1,4 @@
+import {setupBetaAccess} from './beta-access.js';
 import {setupPlans} from './plans.js';
 import {trackStudyActivity} from './activity.js';
 import {newHighlight,parseNotebookTags,validatePayload,validHighlightDetails,studyEntryCopyConflicts,withExistingTags} from './sync-model.js';
@@ -1589,7 +1590,8 @@ async function start(){
  applyPreferences:applyAccountPreferences
  });
  if(account.config.esvEnabled&&!state.translations.some(t=>t.id==='ESV'))state.translations.unshift({id:'ESV',name:'English Standard Version',englishName:'English Standard Version',shortName:'ESV',language:'eng',languageEnglishName:'English'});
- setupPlans({account,esc,toast,getTranslation:()=>state.data?.translation?.shortName||state.translation,openPassage:async passage=>{
+ const beta=setupBetaAccess({account,toast});
+ setupPlans({account,esc,toast,canPreview:()=>beta.enabled,getTranslation:()=>state.data?.translation?.shortName||state.translation,openPassage:async passage=>{
   const available=state.books.find(book=>book.id===passage.book);
   if(!available||passage.chapter>available.numberOfChapters){toast(`${passage.bookName} ${passage.chapter} is not available in this translation. Choose another translation in the reader, then return to your plan.`);return false;}
   await navigate(passage.book,passage.chapter);

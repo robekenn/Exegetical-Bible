@@ -43,6 +43,13 @@ export function createAdminHandler(makeClient=createClient,env=process.env,makeM
     const role=await db.rpc('moderation_is_admin',{p_user:actor});
     admin=!role.error&&role.data===true;
    }
+   if((req.method==='GET'&&q.beta==='1')||(req.method==='POST'&&req.body?.action==='beta_preview')){
+    if(req.method==='POST'&&typeof req.body.enabled!=='boolean')return res.status(400).json({error:'Choose whether beta previews are enabled.'});
+    db??=makeClient(url,secret,options);
+    const result=await db.rpc('beta_state',{p_user:actor,p_owners:owners,p_enabled:req.method==='POST'?req.body.enabled:null});
+    if(result.error)throw result.error;
+    return res.status(200).json(result.data);
+   }
    if(req.method==='GET'&&q.access==='1')return res.status(200).json({admin});
    if(!admin)return res.status(403).json({error:'This account is not authorized for the admin portal.'});
    db??=makeClient(url,secret,options);
@@ -50,6 +57,12 @@ export function createAdminHandler(makeClient=createClient,env=process.env,makeM
     const b=req.body||{};
     if(b.action){
      const {action,target}=b;
+     if(action==='set_beta'){
+      if(typeof target!=='string'||!uuid.test(target)||typeof b.enabled!=='boolean')return res.status(400).json({error:'Choose a valid beta tester and access setting.'});
+      const result=await db.rpc('assign_beta_tester',{p_actor:actor,p_target:target,p_enabled:b.enabled,p_owners:owners});
+      if(result.error)throw result.error;
+      return res.status(200).json({ok:true});
+     }
      if(!['promote','demote','ban','lift','retry_email','decide_appeal','retry_appeal_email'].includes(action)||typeof target!=='string'||!uuid.test(target)){
       return res.status(400).json({error:'Choose a valid moderation action and target.'});
      }

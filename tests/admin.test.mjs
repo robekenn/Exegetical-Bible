@@ -57,3 +57,14 @@ test('activity count and user timestamps are available only through the existing
  assert.equal((await allowed.run({query:{...query,ids:`${uid},${uid}`}})).code,200);
  assert.deepEqual(allowed.calls.at(-1),{name:'moderation_activity',payload:{p_users:[uid]}});
 });
+
+test('beta roles require admin access and preview preferences target only the verified user',async()=>{
+ const regular=harness({user:report});
+ assert.equal((await regular.run({method:'POST',body:{action:'set_beta',target:uid,enabled:true}})).code,403);
+ const admin=harness({user:report,role:true});
+ assert.equal((await admin.run({method:'POST',body:{action:'set_beta',target:uid,enabled:true}})).code,200);
+ assert.deepEqual(admin.calls.at(-1),{name:'assign_beta_tester',payload:{p_actor:report,p_target:uid,p_enabled:true,p_owners:[uid]}});
+ assert.equal((await regular.run({method:'POST',body:{action:'beta_preview',enabled:'true'}})).code,400);
+ await regular.run({method:'POST',body:{action:'beta_preview',enabled:false,target:uid}});
+ assert.deepEqual(regular.calls.at(-1),{name:'beta_state',payload:{p_user:report,p_owners:[uid],p_enabled:false}});
+});
