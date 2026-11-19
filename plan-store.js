@@ -1,12 +1,12 @@
 import {findPlan,progressKey,readPlanCache} from './plan-catalog.js';
 
 // Each account has a separate cache. Pending writes retain their base revision across reloads.
-export function createPlanStore({account,storage=localStorage,onChange=()=>{},online=()=>navigator.onLine!==false,delay=600}){
+export function createPlanStore({account,storage=localStorage,onChange=()=>{},online=()=>navigator.onLine!==false,delay=600,canUse=()=>true}){
  let owner=null,epoch=0,timer=null,running=false,disposed=false;
  let state={runs:{},entries:{},pending:{},conflicts:{},loading:false,error:'',storageError:false};
  const key=id=>id?'exegetical-user-'+id+'-plans':'exegetical-plans';
  const user=()=>account?.getUser()?.id||null;
- const current=(id,version)=>!disposed&&id===user()&&version===epoch;
+ const current=(id,version)=>!disposed&&canUse()&&id===user()&&version===epoch;
  function read(id){try{return readPlanCache(JSON.parse(storage.getItem(key(id))));}catch{return readPlanCache(null);}}
  function notify(){if(!disposed)onChange(state);}
  function persist(){
@@ -16,6 +16,7 @@ export function createPlanStore({account,storage=localStorage,onChange=()=>{},on
  function changed(){persist();notify();clearTimeout(timer);timer=setTimeout(flush,delay);}
  function entry(versionId,session){return state.entries[progressKey(versionId,session)]||{versionId,session,completed:false,reflection:'',revision:0};}
  function start(versionId){
+  if(!canUse())throw Error('Beta previews are unavailable.');
   if(!findPlan(versionId))throw Error('This plan is unavailable.');
   if(state.loading)throw Error('Your plans are still loading. Try again in a moment.');
   if(!state.runs[versionId]){state.runs[versionId]={versionId,id:null,startedAt:new Date().toISOString()};changed();}
@@ -40,7 +41,7 @@ export function createPlanStore({account,storage=localStorage,onChange=()=>{},on
  }
  async function flush(){
   clearTimeout(timer);
-  if(disposed||running||state.loading||!owner||!online())return;
+  if(!canUse()||disposed||running||state.loading||!owner||!online())return;
   const id=owner,version=epoch,client=account.getClient();
   if(!client)return;
   running=true;state.error='';notify();
@@ -88,6 +89,7 @@ export function createPlanStore({account,storage=localStorage,onChange=()=>{},on
   const id=user(),version=++epoch;
   owner=id;clearTimeout(timer);running=false;
   state={...read(id),conflicts:{},loading:Boolean(id),error:'',storageError:false};notify();
+  if(!canUse()){state.loading=false;notify();return;}
   if(!id)return;
   const client=account.getClient();
   try{

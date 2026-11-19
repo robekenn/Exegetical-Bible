@@ -23,3 +23,7 @@ Run `npm run check` and `npm run build`. Apply the foundation and lookup-index m
 `tests/plans.test.mjs` covers storage, identity boundaries, retries, conflict choices, explicit import and the catalog/session/reader flow. `tests/sql/reading-plans.sql` uses disposable fixtures in a rolled-back transaction to verify real PostgreSQL RLS, version immutability, release rules and optimistic writes. Run it against an isolated database or a controlled transaction after applying the migration. No fixture should survive.
 
 Check desktop and phone: open Plans, explore a plan, start it, write a reflection, open Scripture, return to the plan, complete a session, reload, filter in-progress/completed plans, and revisit a completed session. Verify a second-device account sees saved work, and an unrelated account cannot read it.
+
+## Beta access
+
+Plans is currently gated by the Beta tester role or admin/owner eligibility. My account offers a server-persisted preview toggle. Public and regular authenticated accounts cannot read or write Plans tables; restrictive policies apply even if the navigation is bypassed. Existing progress is preserved when previews are off. Apply `db/beta-access.sql` after the Plans foundation; `npm run db:migrate` provisions it when absent. The SQL fixtures now require this gate. Beta testers receive no moderation permissions.

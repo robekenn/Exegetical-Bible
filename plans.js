@@ -1,10 +1,10 @@
 import {planCatalog,findPlan,planProgress,progressKey} from './plan-catalog.js';
 import {createPlanStore} from './plan-store.js';
 
-export function setupPlans({account,esc,toast,openPassage,getTranslation,doc=document,win=window,storage=localStorage}){
+export function setupPlans({account,esc,toast,openPassage,getTranslation,doc=document,win=window,storage=localStorage,canPreview=()=>true}){
  const $=id=>doc.getElementById(id),page=$('plansPage'),workspace=doc.querySelector('.workspace');
  let view={type:'catalog'},filter='all',reading=null;
- const store=createPlanStore({account,storage,onChange:refresh,online:()=>win.navigator.onLine!==false});
+ const store=createPlanStore({account,storage,canUse:canPreview,onChange:refresh,online:()=>win.navigator.onLine!==false});
  const icon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v17H5zM8 8h8M8 12h6M8 16h4"/></svg>';
  const button=(label,action,extra='')=>`<button type="button" data-plan-action="${action}" ${extra}>${label}</button>`;
  function progress(plan){return planProgress(plan,store.state.entries);}
@@ -93,6 +93,7 @@ export function setupPlans({account,esc,toast,openPassage,getTranslation,doc=doc
   doc.querySelectorAll('[data-mobile-view]').forEach(el=>{const selected=el.dataset.mobileView===(plans?'plans':'read');el.classList.toggle('active',selected);if(selected)el.setAttribute('aria-current','page');else el.removeAttribute('aria-current');});
  }
  function open(next=view){
+  if(!canPreview())return toast('Beta previews are unavailable.');
   doc.dispatchEvent(new win.CustomEvent('close-mobile-study'));
   workspace.hidden=true;page.hidden=false;view=next;markNav(true);render(true);
  }
@@ -133,6 +134,8 @@ export function setupPlans({account,esc,toast,openPassage,getTranslation,doc=doc
  $('mobileReadButton').addEventListener('click',showReader,{capture:true});
  $('mobileStudyButton').addEventListener('click',showReader,{capture:true});
  doc.addEventListener('study-before-signout',event=>{if(Object.keys(store.state.pending).length&&!win.confirm('Your plan progress has not synced yet. Signing out removes this device’s unsynced copy. Cancel to keep it open and retry syncing, or OK to sign out.'))event.preventDefault();});
+ doc.addEventListener('beta-before-disable',event=>{if(Object.keys(store.state.pending).length){event.preventDefault();store.flush();toast('Wait for your plan changes to sync before turning previews off.');}});
+ doc.addEventListener('beta-access-changed',()=>{reading=null;view={type:'catalog'};page.replaceChildren();if(!canPreview())showReader();store.load();});
  doc.addEventListener('study-auth-changed',()=>{reading=null;view={type:'catalog'};page.replaceChildren();store.load();});
  win.addEventListener('online',()=>store.refresh());
  doc.addEventListener('visibilitychange',()=>{if(doc.visibilityState==='visible')store.refresh();});
