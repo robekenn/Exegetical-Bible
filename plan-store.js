@@ -19,13 +19,26 @@ export function createPlanStore({account,storage=localStorage,onChange=()=>{},on
   if(!canUse())throw Error('Beta previews are unavailable.');
   if(!findPlan(versionId))throw Error('This plan is unavailable.');
   if(state.loading)throw Error('Your plans are still loading. Try again in a moment.');
-  if(!state.runs[versionId]){state.runs[versionId]={versionId,id:null,startedAt:new Date().toISOString()};changed();}
+  if(!state.runs[versionId]){
+   state.runs[versionId]={versionId,id:null,startedAt:new Date().toISOString(),active:true,activityRevision:0,...(owner?{pendingActivity:{active:true,baseRevision:0}}:{})};changed();
+  }else if(state.runs[versionId].active===false)setActivity(versionId,true);
   return state.runs[versionId];
  }
+ function setActivity(versionId,active){
+  if(!canUse())throw Error('Beta previews are unavailable.');
+  if(state.loading)throw Error('Your plans are still loading. Try again in a moment.');
+  const run=state.runs[versionId];if(!run||run.active===active)return;
+  run.active=active;
+  if(owner)run.pendingActivity={active,baseRevision:run.pendingActivity?.baseRevision??run.activityRevision??0};
+  changed();
+ }
+ function quit(versionId){setActivity(versionId,false);}
+ function hasPending(){return Boolean(owner)&&(Object.keys(state.pending).length>0||Object.values(state.runs).some(run=>!run.id||run.pendingActivity));}
  function update(versionId,session,patch){
   const plan=findPlan(versionId);
   if(!plan?.sessions.some(item=>item.number===session))throw Error('This session is unavailable.');
   if(typeof patch.reflection==='string'&&patch.reflection.length>20000)throw Error('Use up to 20,000 characters for a reflection.');
+  if(state.runs[versionId]?.active===false)throw Error('Resume this plan before editing a session.');
   start(versionId);
   const k=progressKey(versionId,session),previous=entry(versionId,session);
   const next={...previous,...(typeof patch.reflection==='string'?{reflection:patch.reflection}:{}),...(typeof patch.completed==='boolean'?{completed:patch.completed}:{}),updatedAt:new Date().toISOString()};
@@ -52,6 +65,26 @@ export function createPlanStore({account,storage=localStorage,onChange=()=>{},on
     if(!current(id,version))return;
     if(!rows?.[0]?.id)throw Error('The plan could not be started. Try again.');
     run.id=rows[0].id;persist();
+   }
+   for(const run of Object.values(state.runs)){
+    const pending=run.pendingActivity;if(!pending)continue;
+    try{
+     const rows=await request(client.rpc('set_personal_reading_plan_active',{p_run_id:run.id,p_active:pending.active,p_revision:pending.baseRevision}),id,version);
+     if(!current(id,version))return;
+     const saved=rows?.[0];if(!saved)throw Error('The plan status could not be saved. Try again.');
+     run.activityRevision=Number(saved.activity_revision);
+     if(run.pendingActivity===pending)delete run.pendingActivity;
+     else if(run.pendingActivity)run.pendingActivity.baseRevision=run.activityRevision;
+    }catch(error){
+     if(!current(id,version))return;
+     if(error.code!=='40001')throw error;
+     const rows=await request(client.from('reading_plan_runs').select('id,is_active,activity_revision').eq('id',run.id).eq('owner_id',id),id,version);
+     if(!current(id,version))return;
+     if(!rows?.[0])throw Error('This plan is unavailable. Retry syncing.');
+     run.active=rows[0].is_active!==false;run.activityRevision=Number(rows[0].activity_revision);delete run.pendingActivity;
+     state.error='This plan changed on another device. Its current status has been restored; your reflections are preserved.';
+    }
+    persist();
    }
    for(const [k,pending]of Object.entries(state.pending)){
     if(state.conflicts[k])continue;
@@ -82,7 +115,7 @@ export function createPlanStore({account,storage=localStorage,onChange=()=>{},on
    }
   }catch(error){if(current(id,version))state.error=error.message||'Could not sync your plans. Try again.';}
   finally{
-   if(current(id,version)){running=false;persist();notify();clearTimeout(timer);if(!state.error&&Object.keys(state.pending).some(k=>!state.conflicts[k]))timer=setTimeout(flush,delay);}
+   if(current(id,version)){running=false;persist();notify();clearTimeout(timer);if(!state.error&&(Object.keys(state.pending).some(k=>!state.conflicts[k])||Object.values(state.runs).some(run=>run.pendingActivity)))timer=setTimeout(flush,delay);}
   }
  }
  async function load(){
@@ -94,12 +127,16 @@ export function createPlanStore({account,storage=localStorage,onChange=()=>{},on
   const client=account.getClient();
   try{
    if(!online())throw Error('You’re offline. Your device copy is available; reconnect to sync.');
-   const runs=await request(client.from('reading_plan_runs').select('id,version_id,created_at').eq('owner_id',id).eq('mode','personal'),id,version);
+   const runs=await request(client.from('reading_plan_runs').select('id,version_id,created_at,is_active,activity_revision').eq('owner_id',id).eq('mode','personal'),id,version);
    if(!current(id,version))return;
    const rows=await request(client.from('reading_plan_progress').select('*').eq('user_id',id),id,version);
    if(!current(id,version))return;
    const merged=read(id);
-   for(const run of runs||[]){if(findPlan(run.version_id))merged.runs[run.version_id]={versionId:run.version_id,id:run.id,startedAt:run.created_at};}
+   for(const run of runs||[]){
+    if(!findPlan(run.version_id))continue;
+    const local=merged.runs[run.version_id];
+    merged.runs[run.version_id]={versionId:run.version_id,id:run.id,startedAt:run.created_at,active:run.is_active!==false,activityRevision:Number(run.activity_revision)||0,...(local?.pendingActivity?{active:local.active,pendingActivity:local.pendingActivity}:{})};
+   }
    // Clean rows follow the account; offline edits stay local until their revision is accepted.
    for(const k of Object.keys(merged.entries))if(!merged.pending[k]&&merged.runs[merged.entries[k].versionId]?.id)delete merged.entries[k];
    for(const row of rows||[]){
@@ -123,7 +160,7 @@ export function createPlanStore({account,storage=localStorage,onChange=()=>{},on
   const guest=read(null);let count=0;
   for(const run of Object.values(guest.runs)){
    if(state.runs[run.versionId])continue;
-   state.runs[run.versionId]={...run,id:null};count++;
+   state.runs[run.versionId]={...run,id:null,activityRevision:0,pendingActivity:{active:run.active!==false,baseRevision:0}};count++;
    for(const [k,row]of Object.entries(guest.entries))if(row.versionId===run.versionId){const local={...row,revision:0};state.entries[k]=local;state.pending[k]={baseRevision:0,entry:{...local}};}
   }
   changed();return count;
@@ -135,9 +172,9 @@ export function createPlanStore({account,storage=localStorage,onChange=()=>{},on
   if(!owner)return 'Saved on this device';
   if(state.error)return state.error;
   if(!online())return 'Offline · changes stay on this device until you reconnect';
-  if(running||Object.keys(state.pending).length||Object.values(state.runs).some(run=>!run.id))return 'Saving to your account…';
+  if(running||hasPending())return 'Saving to your account…';
   return 'Saved to your account';
  }
- function refresh(){if(!state.loading&&!running&&!Object.keys(state.pending).length)load();else flush();}
- return {get state(){return state;},get owner(){return owner;},load,flush,start,update,entry,resolve,importGuest,guestAvailable,status,refresh,dispose(){disposed=true;epoch++;clearTimeout(timer);}};
+ function refresh(){if(!state.loading&&!running&&!hasPending())load();else flush();}
+ return {get state(){return state;},get owner(){return owner;},load,flush,start,quit,hasPending,update,entry,resolve,importGuest,guestAvailable,status,refresh,dispose(){disposed=true;epoch++;clearTimeout(timer);}};
 }
