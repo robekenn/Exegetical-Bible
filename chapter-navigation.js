@@ -10,6 +10,9 @@ export function setupChapterNavigation(doc=document,win=window,phone=win.matchMe
   button.onclick=()=>source.click();
  }
  let gesture=null,suppressUntil=0;
+ // Unsupported browsers (including iPhone Safari) have no programmable vibration API.
+ // A rejected request can be retried on release, after touch activation is available.
+ function pulse(){try{return typeof win.navigator.vibrate==='function'&&win.navigator.vibrate(24)===true;}catch{return false;}}
  const selection=()=>!!win.getSelection()?.toString();
  const available=dir=>!(dir>0?next:previous).disabled&&text.getAttribute('aria-busy')!=='true';
  const blocked=()=>!phone.matches||doc.body.classList.contains('mobile-study-open')||!!doc.querySelector('dialog[open]')||selection();
@@ -18,7 +21,7 @@ export function setupChapterNavigation(doc=document,win=window,phone=win.matchMe
   reset();if(event.touches.length!==1||blocked())return;
   const touch=event.touches[0];
   if(touch.clientX<24||touch.clientX>win.innerWidth-24||event.target.closest('input,textarea,select,a,.chapter-nav,button:not(.verse)'))return;
-  gesture={x:touch.clientX,y:touch.clientY,id:touch.identifier,locked:false,ready:false,dir:0};
+  gesture={x:touch.clientX,y:touch.clientY,id:touch.identifier,locked:false,ready:false,dir:0,hapticAttempted:false,hapticSent:false};
  },{passive:true});
  reader.addEventListener('touchmove',event=>{
   if(!gesture)return;
@@ -33,7 +36,7 @@ export function setupChapterNavigation(doc=document,win=window,phone=win.matchMe
   if(event.cancelable)event.preventDefault();
   suppressUntil=Date.now()+500;
   const dir=dx<0?1:-1,allowed=available(dir),ready=allowed&&Math.abs(dx)>=80;
-  if(ready&&!gesture.ready){try{win.navigator.vibrate?.(12);}catch{/* Optional device capability. */}}
+  if(ready&&!gesture.hapticAttempted){gesture.hapticAttempted=true;gesture.hapticSent=pulse();}
   gesture.dir=dir;gesture.ready=ready;
   text.classList.add('chapter-pulling');text.style.setProperty('--chapter-pull',(allowed?Math.max(-48,Math.min(48,dx*.35)):dx*.08)+'px');
  },{passive:false});
@@ -43,6 +46,7 @@ export function setupChapterNavigation(doc=document,win=window,phone=win.matchMe
   const {ready,dir,locked}=gesture;
   const commit=ready&&event.touches.length===0&&!blocked()&&available(dir);
   if(locked){if(event.cancelable)event.preventDefault();suppressUntil=Date.now()+500;}
+  if(commit&&!gesture.hapticSent)pulse();
   reset();if(commit)(dir>0?next:previous).click();
  },{passive:false});
  reader.addEventListener('touchcancel',reset,{passive:true});

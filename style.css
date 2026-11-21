@@ -590,7 +590,8 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
 
 /* Fixed chapter arrows follow the adjustable reader edges and remain at viewport mid-height. */
 .desktop-chapter-arrows{position:fixed;top:50dvh;left:calc(var(--books-column,0px) + 6px);right:calc(var(--study-column,0px) + 6px);height:0;display:flex;justify-content:space-between;pointer-events:none;z-index:34;transition:left var(--panel-motion),right var(--panel-motion)}
-.desktop-chapter-arrows button{display:grid;place-items:center;width:38px;height:38px;min-height:38px;padding:0;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--ink);font-size:22px;line-height:1;transform:translateY(-50%);pointer-events:auto;opacity:.65;box-shadow:none}
+.desktop-chapter-arrows button{display:grid;place-items:center;width:38px;height:38px;min-height:38px;padding:0;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--ink);line-height:0;transform:translateY(-50%);pointer-events:auto;opacity:.75;box-shadow:none;flex-shrink:0}
+.desktop-chapter-arrows button svg{display:block;width:20px;height:20px;margin:0;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
 .desktop-chapter-arrows button:hover,.desktop-chapter-arrows button:focus-visible{background:transparent;opacity:1;border-color:var(--accent)}
 .desktop-chapter-arrows button:disabled{opacity:.2;cursor:default}
 @media(max-width:760px){
