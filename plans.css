@@ -68,3 +68,8 @@
 
 #plansNav[hidden],#mobilePlansButton[hidden],#betaPreview[hidden]{display:none!important}
 @media(max-width:760px){.mobile-nav:has(#mobilePlansButton[hidden]){grid-template-columns:repeat(5,minmax(0,1fr))}}
+
+.plan-quit-confirm{max-width:680px;padding-top:clamp(40px,8vh,100px)}
+.plan-quit-confirm h1{font:400 clamp(30px,5vw,44px)/1.2 var(--serif);margin:14px 0 24px}
+.plan-quit-confirm>p:not(.plan-kicker){color:var(--muted);line-height:1.8;max-width:55ch}
+.plan-overview-start>.plan-text-button{align-self:center;margin-top:8px}

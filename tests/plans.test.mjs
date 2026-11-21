@@ -17,10 +17,15 @@ function cloud(){
    if(failed)return {error:{message:'Network unavailable'}};
    if(name==='start_personal_reading_plan'){
     let row=runs.find(r=>r.owner_id===owner&&r.version_id===args.p_version_id);
-    if(!row){row={id:owner+'-'+args.p_version_id,version_id:args.p_version_id,owner_id:owner,created_at:new Date().toISOString(),mode:'personal'};runs.push(row);}
+    if(!row){row={id:owner+'-'+args.p_version_id,version_id:args.p_version_id,owner_id:owner,created_at:new Date().toISOString(),mode:'personal',is_active:true,activity_revision:0};runs.push(row);}
     return {data:[structuredClone(row)]};
    }
    const run=runs.find(r=>r.id===args.p_run_id&&r.owner_id===owner);if(!run)return {error:{message:'This study is unavailable'}};
+   if(name==='set_personal_reading_plan_active'){
+    if(run.activity_revision!==args.p_revision&&run.is_active!==args.p_active)return {error:{code:'40001',message:'This plan changed on another device'}};
+    if(run.is_active!==args.p_active){run.is_active=args.p_active;run.activity_revision++;}
+    return {data:[structuredClone(run)]};
+   }
    let row=rows.find(r=>r.run_id===run.id&&r.session_number===args.p_session);
    if((row?.revision||0)!==args.p_revision)return {error:{code:'40001',message:'This session changed on another device'}};
    if(!row){row={run_id:run.id,version_id:run.version_id,user_id:owner,session_number:args.p_session,revision:0};rows.push(row);}
@@ -136,7 +141,7 @@ test('account changes clear a hidden reflection and unsynced sign-out can be can
  const controller=setupPlans({account,esc:s=>String(s??''),toast:()=>{},getTranslation:()=> 'BSB',openPassage:async()=>true,doc:d,win:w,storage:w.localStorage});
  try{
   await controller.store.load();controller.store.update('mark-v1',1,{reflection:'Private first-account writing'});
-  d.getElementById('plansNav').click();d.querySelector('.plan-card [data-version="mark-v1"]').click();assert.equal(d.getElementById('planReflection').value,'Private first-account writing');
+  d.getElementById('plansNav').click();d.querySelector('.plan-continue button').click();assert.equal(d.getElementById('planReflection').value,'Private first-account writing');
   assert.equal(d.dispatchEvent(new w.CustomEvent('study-before-signout',{cancelable:true})),false);
   d.getElementById('readNav').click();user={id:'second'};d.dispatchEvent(new w.CustomEvent('study-auth-changed'));assert.doesNotMatch(d.getElementById('plansPage').textContent,/Private first-account/);await tick();
   d.getElementById('plansNav').click();assert.doesNotMatch(d.getElementById('plansPage').textContent,/Private first-account/);assert.equal(controller.store.entry('mark-v1',1).reflection,'');
@@ -146,8 +151,70 @@ test('account changes clear a hidden reflection and unsynced sign-out can be can
 test('finishing a plan offers review and sessions can be marked incomplete again',async()=>{
  await ui(async({d,controller})=>{
   for(let number=1;number<=6;number++)controller.store.update('psalms-v1',number,{completed:true});
-  d.getElementById('plansNav').click();d.querySelector('.plan-card [data-version="psalms-v1"]').click();assert.match(d.querySelector('.plan-session-heading h1').textContent,/139/);
+  d.getElementById('plansNav').click();d.querySelector('.plan-continue button').click();assert.match(d.querySelector('.plan-session-heading h1').textContent,/139/);
   d.getElementById('planComplete').click();assert.ok(d.querySelector('.plan-finished'));assert.equal(planProgress(planCatalog[2],controller.store.state.entries).finished,true);
   d.querySelector('[data-plan-action="explore"]').click();d.querySelector('.plan-session-list li button').click();d.getElementById('planIncomplete').click();assert.equal(planProgress(planCatalog[2],controller.store.state.entries).finished,false);
+ });
+});
+
+test('quitting and resuming a guest plan preserves progress and reflections across reload',async()=>{
+ const storage=memory(),account={getUser:()=>null};let a=createPlanStore({account,storage,delay:60000});
+ try{await a.load();a.update('mark-v1',1,{reflection:'Keep this',completed:true});a.quit('mark-v1');assert.equal(a.state.runs['mark-v1'].active,false);assert.equal(a.hasPending(),false);assert.throws(()=>a.update('mark-v1',1,{reflection:'Stale editor'}),/Resume/);a.dispose();a=createPlanStore({account,storage,delay:60000});await a.load();assert.equal(a.state.runs['mark-v1'].active,false);a.start('mark-v1');assert.equal(a.entry('mark-v1',1).reflection,'Keep this');assert.equal(a.entry('mark-v1',1).completed,true);assert.equal(a.state.runs['mark-v1'].active,true);}finally{a.dispose();}
+});
+
+test('quit and resume statuses sync across devices without deleting session records',async()=>{
+ const server=cloud(),a=signed(server),b=signed(server);
+ try{await a.store.load();a.store.update('mark-v1',1,{completed:true,reflection:'Private note'});await a.store.flush();a.store.quit('mark-v1');assert.equal(a.store.hasPending(),true);await a.store.flush();assert.equal(a.store.hasPending(),false);await b.store.load();assert.equal(b.store.state.runs['mark-v1'].active,false);assert.equal(b.store.entry('mark-v1',1).reflection,'Private note');b.store.start('mark-v1');await b.store.flush();await a.store.load();assert.equal(a.store.state.runs['mark-v1'].active,true);assert.equal(server.rows.length,1);assert.equal(a.store.entry('mark-v1',1).completed,true);}finally{a.store.dispose();b.store.dispose();}
+});
+
+test('offline quit survives reload and syncs after reconnection',async()=>{
+ const server=cloud(),storage=memory();let a=signed(server,'first',storage);
+ try{await a.store.load();a.store.start('mark-v1');await a.store.flush();server.failed=true;a.store.quit('mark-v1');await a.store.flush();a.store.dispose();a=signed(server,'first',storage);await a.store.load();assert.equal(a.store.state.runs['mark-v1'].active,false);assert.equal(a.store.state.runs['mark-v1'].pendingActivity.active,false);server.failed=false;await a.store.load();assert.equal(server.runs[0].is_active,false);assert.equal(a.store.hasPending(),false);}finally{a.store.dispose();}
+});
+
+test('stale lifecycle writes follow the newer account status and preserve drafts',async()=>{
+ const server=cloud(),a=signed(server),b=signed(server);
+ try{await a.store.load();a.store.start('mark-v1');await a.store.flush();await b.store.load();a.store.quit('mark-v1');await a.store.flush();a.store.start('mark-v1');await a.store.flush();b.store.update('mark-v1',1,{reflection:'Unsynced but preserved'});b.store.quit('mark-v1');await b.store.flush();assert.equal(b.store.state.runs['mark-v1'].active,true);assert.match(b.store.state.error,/another device/);assert.equal(server.rows[0].reflection,'Unsynced but preserved');}finally{a.store.dispose();b.store.dispose();}
+});
+
+test('quit during an in-flight start syncs the final inactive state',async()=>{
+ const server=cloud(),a=signed(server);let release;
+ try{await a.store.load();a.store.start('mark-v1');server.pause=new Promise(r=>{release=r;});const pending=a.store.flush();await tick();a.store.quit('mark-v1');release();await pending;await a.store.flush();assert.equal(server.runs[0].is_active,false);assert.equal(a.store.hasPending(),false);}finally{a.store.dispose();}
+});
+
+test('Available studies excludes active plans, quitting is cancelable and clears the reader return',async()=>{
+ await ui(async({w,d,controller})=>{
+  d.getElementById('plansNav').click();d.querySelector('[data-plan-action="explore"][data-version="mark-v1"]').click();d.querySelector('.plan-overview-start [data-plan-action="session"]').click();
+  const editor=d.getElementById('planReflection');editor.value='Saved reflection';editor.dispatchEvent(new w.Event('input'));
+  d.querySelector('[data-plan-action="passage"]').click();await tick();d.getElementById('returnToPlan').click();d.querySelector('[data-plan-action="quit"]').click();assert.match(d.querySelector('.plan-quit-confirm').textContent,/reflections will be kept/);
+  d.querySelector('[data-plan-action="cancel-quit"]').click();assert.equal(d.getElementById('planReflection').value,'Saved reflection');assert.equal(controller.store.state.runs['mark-v1'].active,true);
+  d.querySelector('.plan-breadcrumb button').click();d.querySelector('.plan-breadcrumb button').click();assert.equal(d.querySelectorAll('.plan-card').length,2);assert.equal(d.querySelector('.plan-card [data-version="mark-v1"]'),null);
+  d.querySelector('[data-filter="started"]').click();assert.equal(d.querySelectorAll('.plan-card').length,1);d.querySelector('.plan-card-open').click();d.querySelector('[data-plan-action="quit"]').click();d.querySelector('[data-plan-action="confirm-quit"]').click();
+  assert.equal(d.getElementById('planReadingBar').hidden,true);assert.equal(d.querySelectorAll('.plan-card').length,3);assert.match(d.querySelector('.plan-card [data-version="mark-v1"]').textContent,/Resume/);assert.equal(controller.store.entry('mark-v1',1).reflection,'Saved reflection');assert.equal(d.querySelector('.plan-continue'),null);
+  d.querySelector('.plan-card [data-version="mark-v1"]').click();d.querySelector('.plan-overview-start [data-plan-action="session"]').click();assert.equal(d.getElementById('planReflection').value,'Saved reflection');assert.equal(controller.store.state.runs['mark-v1'].active,true);
+ });
+});
+
+test('completed plans return to Available studies and remain in Completed',async()=>{
+ await ui(async({d,controller})=>{
+  for(let n=1;n<=7;n++)controller.store.update('psalms-v1',n,{completed:true});
+  d.getElementById('plansNav').click();assert.ok(d.querySelector('.plan-card [data-version="psalms-v1"]'));d.querySelector('[data-filter="finished"]').click();assert.equal(d.querySelectorAll('.plan-card').length,1);d.querySelector('[data-filter="started"]').click();assert.equal(d.querySelectorAll('.plan-card').length,0);
+ });
+});
+
+test('existing plan edits still require beta access and completed account loading',async()=>{
+ let enabled=true;const store=createPlanStore({account:{getUser:()=>null},storage:memory(),delay:60000,canUse:()=>enabled});
+ try{await store.load();store.start('mark-v1');enabled=false;assert.throws(()=>store.update('mark-v1',1,{reflection:'Blocked'}),/Beta/);assert.throws(()=>store.quit('mark-v1'),/Beta/);enabled=true;store.state.loading=true;assert.throws(()=>store.update('mark-v1',1,{reflection:'Blocked'}),/loading/);assert.equal(store.entry('mark-v1',1).reflection,'');}finally{store.dispose();}
+});
+
+test('resume during an in-flight quit queues against its saved activity revision',async()=>{
+ const server=cloud(),a=signed(server);let release;
+ try{await a.store.load();a.store.start('mark-v1');await a.store.flush();a.store.quit('mark-v1');server.pause=new Promise(r=>{release=r;});const pending=a.store.flush();await tick();a.store.start('mark-v1');release();await pending;await a.store.flush();assert.equal(server.runs[0].is_active,true);assert.equal(a.store.state.runs['mark-v1'].active,true);assert.equal(a.store.hasPending(),false);}finally{a.store.dispose();}
+});
+
+test('a quit received while reading clears the return banner and opens a resumable overview',async()=>{
+ await ui(async({d,controller})=>{
+  d.getElementById('plansNav').click();d.querySelector('[data-plan-action="explore"][data-version="mark-v1"]').click();d.querySelector('.plan-overview-start [data-plan-action="session"]').click();d.querySelector('[data-plan-action="passage"]').click();await tick();
+  assert.equal(d.getElementById('planReadingBar').hidden,false);controller.store.quit('mark-v1');assert.equal(d.getElementById('planReadingBar').hidden,true);d.getElementById('plansNav').click();assert.equal(d.getElementById('planReflection'),null);assert.match(d.querySelector('.plan-overview-start button').textContent,/Resume/);
  });
 });

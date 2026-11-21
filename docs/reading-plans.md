@@ -27,3 +27,9 @@ Check desktop and phone: open Plans, explore a plan, start it, write a reflectio
 ## Beta access
 
 Plans is currently gated by the Beta tester role or admin/owner eligibility. My account offers a server-persisted preview toggle. Public and regular authenticated accounts cannot read or write Plans tables; restrictive policies apply even if the navigation is bypassed. Existing progress is preserved when previews are off. Apply `db/beta-access.sql` after the Plans foundation; `npm run db:migrate` provisions it when absent. The SQL fixtures now require this gate. Beta testers receive no moderation permissions.
+
+## Quitting personal plans
+
+The default Available studies filter excludes active, unfinished plans. In progress lists those plans; Completed and Available studies both include completed plans. Quit is offered in the overview and session page with a confirmation. Quitting returns to Available studies and clears that plan’s reader-return banner. It preserves completed sessions and reflections. Resuming reactivates the existing run and continues at the first unfinished session.
+
+`is_active` and `activity_revision` are additive run fields. The owner-only, security-invoker `set_personal_reading_plan_active` RPC uses a row lock and optimistic revision; identical retries succeed. Existing beta restrictions remain in force. Guests persist activity locally; account activity changes queue across offline reloads and participate in sign-out/preview-disable warnings. A conflicting status from another device is restored with an explicit notice, preserving reflections. Progress writes never implicitly reactivate a quit plan. Apply `20261121170515_personal_plan_activity.sql` before the frontend; `npm run db:migrate` also provisions it when absent.

@@ -24,7 +24,10 @@ export function readPlanCache(raw){
  const clean={runs:{},entries:{},pending:{}};
  if(!raw||raw.format!==1)return clean;
  for(const [key,run] of Object.entries(raw.runs||{})){
-  if(findPlan(key)&&run?.versionId===key&&typeof run.startedAt==='string'&&Number.isFinite(Date.parse(run.startedAt)))clean.runs[key]={versionId:key,startedAt:run.startedAt,id:typeof run.id==='string'?run.id:null};
+  if(findPlan(key)&&run?.versionId===key&&typeof run.startedAt==='string'&&Number.isFinite(Date.parse(run.startedAt))){
+   clean.runs[key]={versionId:key,startedAt:run.startedAt,id:typeof run.id==='string'?run.id:null,active:run.active!==false,activityRevision:Number.isSafeInteger(run.activityRevision)&&run.activityRevision>=0?run.activityRevision:0};
+   if(typeof run.pendingActivity?.active==='boolean'&&Number.isSafeInteger(run.pendingActivity.baseRevision)&&run.pendingActivity.baseRevision>=0)clean.runs[key].pendingActivity={...run.pendingActivity};
+  }
  }
  for(const [key,entry] of Object.entries(raw.entries||{})){
   if(validPlanEntry(entry)&&key===progressKey(entry.versionId,entry.session)&&clean.runs[entry.versionId])clean.entries[key]={...entry};
