@@ -1,6 +1,8 @@
+import {setupChapterNavigation} from './chapter-navigation.js';
 import {searchPassage,testamentOf,openSearchPassage,addVerseTextOption} from './book-navigation.js';
 export function setupMobile({state,modal,esc,navigate,toast,openVerseSearch,refreshForeground=()=>{}}){
  const $=id=>document.getElementById(id),phone=matchMedia('(max-width: 760px)'),sheet=$('study');let returnFocus=null;
+ setupChapterNavigation(document,window,phone);
  function active(view){if(view==='read'&&document.getElementById('plansPage')?.hidden===false)view='plans';document.querySelectorAll('[data-mobile-view]').forEach(b=>{const selected=b.dataset.mobileView===view;b.classList.toggle('active',selected);if(selected)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});}
  function closeStudy(restore=true){resetSwipe();document.body.classList.remove('mobile-study-open');sheet.removeAttribute('role');sheet.removeAttribute('aria-modal');sheet.removeAttribute('aria-labelledby');$('mobileStudyBackdrop').hidden=true;$('mobileStudyButton').setAttribute('aria-expanded','false');active('read');if(restore&&returnFocus?.isConnected)returnFocus.focus({preventScroll:true});}
  function openStudy(){if(!phone.matches)return;if($('modal').open)return;if(!document.body.classList.contains('mobile-study-open'))returnFocus=document.activeElement;document.body.classList.add('mobile-study-open');sheet.setAttribute('role','dialog');sheet.setAttribute('aria-modal','true');sheet.setAttribute('aria-labelledby','studyRef');$('mobileStudyBackdrop').hidden=false;$('mobileStudyButton').setAttribute('aria-expanded','true');active('study');$('mobileCloseStudy').focus({preventScroll:true});}

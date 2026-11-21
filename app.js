@@ -746,7 +746,7 @@ $('bookFilter').oninput=renderBooks;
 document.querySelectorAll('[data-testament]').forEach(b=>b.onclick=()=>{state.testament=b.dataset.testament;document.querySelectorAll('[data-testament]').forEach(x=>{x.classList.toggle('active',x===b);x.setAttribute('aria-pressed',String(x===b));});bookNavigation?.setTestament();});
 $('bookSelect').onchange=e=>navigate(e.target.value,1);
 $('chapterSelect').onchange=e=>navigate(state.book,Number(e.target.value));
-function move(dir){const b=book();if(!b)return;const c=state.chapter+dir;if(c>=1&&c<=b.numberOfChapters)navigate(state.book,c);else{const next=state.books[state.books.indexOf(b)+dir];if(next)navigate(next.id,dir>0?1:next.numberOfChapters);}window.scrollTo({top:0,behavior:'smooth'});}
+function move(dir){if($(dir>0?'next':'previous').disabled)return;const b=book();if(!b)return;const c=state.chapter+dir;if(c>=1&&c<=b.numberOfChapters)navigate(state.book,c);else{const next=state.books[state.books.indexOf(b)+dir];if(next)navigate(next.id,dir>0?1:next.numberOfChapters);}window.scrollTo({top:0,behavior:'smooth'});}
 $('previous').onclick=()=>move(-1);$('next').onclick=()=>move(1);
 function setupDesktopPanels(){
  const workspace=document.querySelector('.workspace');
