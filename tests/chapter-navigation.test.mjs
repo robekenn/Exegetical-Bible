@@ -5,13 +5,13 @@ import {setupChapterNavigation} from '../chapter-navigation.js';
 function fixture(){
  const dom=new JSDOM('<button id="chapterPrevious"></button><button id="chapterNext"></button><div class="reading-content"><div id="chapterText"><button class="verse">Verse</button><a href="#">Source</a></div><button id="previous"></button><button id="next"></button></div><dialog></dialog>');
  const {window:w}=dom,d=w.document;w.matchMedia=()=>({matches:true,addEventListener(){}});
- let prev=0,next=0,pulses=0;d.getElementById('previous').onclick=()=>prev++;d.getElementById('next').onclick=()=>next++;w.navigator.vibrate=()=>pulses++;
+ let prev=0,next=0,pulses=0;d.getElementById('previous').onclick=()=>prev++;d.getElementById('next').onclick=()=>next++;w.navigator.vibrate=()=>{pulses++;return true;};
  setupChapterNavigation(d,w);
  const target=d.querySelector('.verse');
  function touch(type,x,y=100,count=1,node=target){const e=new w.Event(type,{bubbles:true,cancelable:true});const t={clientX:x,clientY:y,identifier:1};Object.defineProperties(e,{touches:{value:type==='touchend'?[]:Array(count).fill(t)},changedTouches:{value:[t]}});node.dispatchEvent(e);return e;}
  return {d,w,touch,get counts(){return [prev,next,pulses];}};
 }
-test('toolbar controls mirror loading and boundaries and use existing chapter handlers',async()=>{
+test('chapter controls mirror loading and boundaries and use existing chapter handlers',async()=>{
  const f=fixture();f.d.getElementById('chapterNext').click();assert.deepEqual(f.counts,[0,1,0]);
  f.d.getElementById('previous').disabled=true;await Promise.resolve();assert.equal(f.d.getElementById('chapterPrevious').disabled,true);f.d.getElementById('chapterPrevious').click();assert.equal(f.counts[0],0);
  f.d.getElementById('previous').disabled=false;await Promise.resolve();f.d.getElementById('chapterPrevious').click();assert.equal(f.counts[0],1);
@@ -44,4 +44,17 @@ test('desktop touch gestures do not navigate',()=>{
  dom.window.matchMedia=()=>({matches:false,addEventListener(){}});let turns=0;dom.window.document.getElementById('next').onclick=()=>turns++;setupChapterNavigation(dom.window.document,dom.window);
  for(const [type,x] of [['touchstart',220],['touchmove',100],['touchend',100]]){const e=new dom.window.Event(type,{bubbles:true});const touch={identifier:1,clientX:x,clientY:100};Object.defineProperties(e,{touches:{value:type==='touchend'?[]:[touch]},changedTouches:{value:[touch]}});dom.window.document.getElementById('chapterText').dispatchEvent(e);}
  assert.equal(turns,0);
+});
+
+test('rejected threshold vibration retries at release with a perceptible short pulse',()=>{
+ const f=fixture();const pulses=[];f.w.navigator.vibrate=duration=>{pulses.push(duration);return pulses.length>1;};
+ f.touch('touchstart',220);f.touch('touchmove',120);assert.deepEqual(pulses,[24]);
+ f.touch('touchend',120);assert.deepEqual(pulses,[24,24]);assert.equal(f.counts[1],1);
+});
+test('threshold oscillation does not repeatedly buzz and canceled pulls do not retry',()=>{
+ const f=fixture();f.touch('touchstart',220);f.touch('touchmove',120);f.touch('touchmove',200);f.touch('touchmove',120);f.touch('touchend',120);assert.equal(f.counts[2],1);
+ let pulses=0;f.w.navigator.vibrate=()=>{pulses++;return false;};f.touch('touchstart',220);f.touch('touchmove',120);f.touch('touchcancel',120);f.touch('touchend',120);assert.equal(pulses,1);
+});
+test('vibration errors never prevent a chapter turn',()=>{
+ const f=fixture();f.w.navigator.vibrate=()=>{throw Error('Unavailable');};f.touch('touchstart',220);f.touch('touchmove',120);f.touch('touchend',120);assert.equal(f.counts[1],1);
 });
