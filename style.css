@@ -588,17 +588,15 @@ dialog#modal[open]{display:flex;flex-direction:column;overflow:hidden;overscroll
  .main-navigation button+button:before{inset-inline-start:-10px}
 }
 
-/* Chapter navigation stays beside the passage picker without competing with panel handles. */
-.desktop-chapter-arrows{display:flex;gap:4px;flex-shrink:0}
-.desktop-chapter-arrows button{width:38px;height:40px;padding:0;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--ink);font-size:22px;line-height:1}
-.desktop-chapter-arrows button:disabled{opacity:.35;cursor:default}
-.chapter-swipe-cue{display:none}
+/* Fixed chapter arrows follow the adjustable reader edges and remain at viewport mid-height. */
+.desktop-chapter-arrows{position:fixed;top:50dvh;left:calc(var(--books-column,0px) + 6px);right:calc(var(--study-column,0px) + 6px);height:0;display:flex;justify-content:space-between;pointer-events:none;z-index:34;transition:left var(--panel-motion),right var(--panel-motion)}
+.desktop-chapter-arrows button{display:grid;place-items:center;width:38px;height:38px;min-height:38px;padding:0;border:1px solid var(--line);border-radius:50%;background:transparent;color:var(--ink);font-size:22px;line-height:1;transform:translateY(-50%);pointer-events:auto;opacity:.65;box-shadow:none}
+.desktop-chapter-arrows button:hover,.desktop-chapter-arrows button:focus-visible{background:transparent;opacity:1;border-color:var(--accent)}
+.desktop-chapter-arrows button:disabled{opacity:.2;cursor:default}
 @media(max-width:760px){
  .desktop-chapter-arrows{display:none}
  .reading-content{touch-action:pan-y pinch-zoom}
  #chapterText{transform:translateX(var(--chapter-pull,0px));transition:transform .18s ease-out}
  #chapterText.chapter-pulling{transition:none}
- .chapter-swipe-cue:not([hidden]){display:block;position:fixed;bottom:100px;left:50%;transform:translateX(-50%);z-index:30;max-width:calc(100vw - 48px);width:max-content;padding:10px 16px;border:1px solid var(--line);border-radius:24px;background:var(--paper);color:var(--ink);box-shadow:0 4px 20px #0002;font:600 14px/1.4 system-ui;pointer-events:none}
- .chapter-swipe-cue.ready{border-color:currentColor}
 }
-@media(prefers-reduced-motion:reduce){#chapterText{transition:none}}
+@media(prefers-reduced-motion:reduce){#chapterText,.desktop-chapter-arrows{transition:none}}

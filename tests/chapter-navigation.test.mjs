@@ -18,7 +18,7 @@ test('toolbar controls mirror loading and boundaries and use existing chapter ha
 });
 test('left and right pulls commit once on release with optional haptics',()=>{
  const f=fixture();f.touch('touchstart',220);f.touch('touchmove',120);assert.deepEqual(f.counts,[0,0,1]);f.touch('touchend',120);assert.deepEqual(f.counts,[0,1,1]);
- f.touch('touchstart',120);f.touch('touchmove',230);f.touch('touchend',230);assert.deepEqual(f.counts,[1,1,2]);assert.equal(f.d.querySelector('.chapter-swipe-cue').hidden,true);
+ f.touch('touchstart',120);f.touch('touchmove',230);f.touch('touchend',230);assert.deepEqual(f.counts,[1,1,2]);assert.equal(f.d.querySelector('.chapter-swipe-cue'),null);
 });
 test('short pulls, vertical scroll, edge gestures and multi-touch never turn a chapter',()=>{
  for(const run of [f=>{f.touch('touchstart',220);f.touch('touchmove',180);f.touch('touchend',180);},f=>{f.touch('touchstart',220);assert.equal(f.touch('touchmove',210,150).defaultPrevented,false);f.touch('touchmove',80,160);f.touch('touchend',80);},f=>{f.touch('touchstart',10);f.touch('touchmove',150);f.touch('touchend',150);},f=>{f.touch('touchstart',220);f.touch('touchmove',100,100,2);f.touch('touchend',100);}]){const f=fixture();run(f);assert.deepEqual(f.counts,[0,0,0]);}

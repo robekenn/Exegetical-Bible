@@ -9,12 +9,11 @@ export function setupChapterNavigation(doc=document,win=window,phone=win.matchMe
   new win.MutationObserver(sync).observe(source,{attributes:true,attributeFilter:['disabled']});
   button.onclick=()=>source.click();
  }
- const cue=doc.createElement('div');cue.className='chapter-swipe-cue';cue.hidden=true;cue.setAttribute('aria-hidden','true');reader.append(cue);
  let gesture=null,suppressUntil=0;
  const selection=()=>!!win.getSelection()?.toString();
  const available=dir=>!(dir>0?next:previous).disabled&&text.getAttribute('aria-busy')!=='true';
  const blocked=()=>!phone.matches||doc.body.classList.contains('mobile-study-open')||!!doc.querySelector('dialog[open]')||selection();
- function reset(){gesture=null;cue.hidden=true;text.style.removeProperty('--chapter-pull');text.classList.remove('chapter-pulling');}
+ function reset(){gesture=null;text.style.removeProperty('--chapter-pull');text.classList.remove('chapter-pulling');}
  reader.addEventListener('touchstart',event=>{
   reset();if(event.touches.length!==1||blocked())return;
   const touch=event.touches[0];
@@ -37,8 +36,6 @@ export function setupChapterNavigation(doc=document,win=window,phone=win.matchMe
   if(ready&&!gesture.ready){try{win.navigator.vibrate?.(12);}catch{/* Optional device capability. */}}
   gesture.dir=dir;gesture.ready=ready;
   text.classList.add('chapter-pulling');text.style.setProperty('--chapter-pull',(allowed?Math.max(-48,Math.min(48,dx*.35)):dx*.08)+'px');
-  cue.hidden=false;cue.textContent=allowed?(ready?'Release for ':'Pull for ')+(dir>0?'next chapter →':'← previous chapter'):(dir>0?'End of Bible':'Beginning of Bible');
-  cue.classList.toggle('ready',ready);
  },{passive:false});
  reader.addEventListener('touchend',event=>{
   if(!gesture)return;
